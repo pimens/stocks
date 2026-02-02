@@ -100,15 +100,35 @@ class IndicatorService {
     return padded;
   }
 
-  // Calculate OBV (On Balance Volume)
+  // Calculate OBV (On Balance Volume) - Manual implementation for accuracy
   calculateOBV(prices) {
-    const values = OBV.calculate({
-      close: prices.map(p => p.close),
-      volume: prices.map(p => p.volume)
-    });
+    if (prices.length === 0) return [];
     
-    const padded = Array(prices.length - values.length).fill(null).concat(values);
-    return padded;
+    const results = [];
+    let obv = 0;
+    
+    // First day - OBV starts at 0 or first day's volume
+    results.push(0);
+    
+    // Calculate OBV for subsequent days
+    for (let i = 1; i < prices.length; i++) {
+      const currentClose = prices[i].close;
+      const prevClose = prices[i - 1].close;
+      const currentVolume = prices[i].volume || 0;
+      
+      if (currentClose > prevClose) {
+        // Price up - add volume
+        obv += currentVolume;
+      } else if (currentClose < prevClose) {
+        // Price down - subtract volume
+        obv -= currentVolume;
+      }
+      // If price unchanged, OBV stays the same
+      
+      results.push(obv);
+    }
+    
+    return results;
   }
 
   // Get all indicators for a stock
@@ -581,8 +601,14 @@ class IndicatorService {
         atr: indicators.atr[prevIdx] ? parseFloat(indicators.atr[prevIdx].toFixed(2)) : null,
         atrPercent: indicators.atr[prevIdx] ? parseFloat((indicators.atr[prevIdx] / prevClose * 100).toFixed(4)) : null,
         
-        // OBV (H-1)
-        obv: indicators.obv[prevIdx] || null,
+        // OBV (H-1) - with change and trend
+        obv: indicators.obv[prevIdx] || 0,
+        obvChange: (prevIdx >= 1 && indicators.obv[prevIdx] !== null && indicators.obv[prevIdx - 1] !== null) 
+          ? indicators.obv[prevIdx] - indicators.obv[prevIdx - 1] 
+          : null,
+        obvTrend: (prevIdx >= 1 && indicators.obv[prevIdx] !== null && indicators.obv[prevIdx - 1] !== null)
+          ? (indicators.obv[prevIdx] > indicators.obv[prevIdx - 1] ? 1 : (indicators.obv[prevIdx] < indicators.obv[prevIdx - 1] ? -1 : 0))
+          : null,
         
         // Williams %R (H-1)
         williamsR: indicators.williamsR[prevIdx] ? parseFloat(indicators.williamsR[prevIdx].toFixed(2)) : null,
