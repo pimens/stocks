@@ -1,6 +1,7 @@
 import axios from 'axios'
 
-const API_BASE = '/api'
+// Use environment variable for API base URL, fallback to relative path for Vercel
+const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 
 export const stockApi = {
   // Get popular Indonesian stocks

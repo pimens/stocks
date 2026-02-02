@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "buildCommand": "cd client && npm install && npm run build",
+  "outputDirectory": "client/dist",
+  "installCommand": "npm install && cd client && npm install",
+  "framework": null,
+  "packageManager": "npm",
+  "rewrites": [
+    { "source": "/api/health", "destination": "/api/health.js" },
+    { "source": "/api/stocks/popular", "destination": "/api/stocks/popular.js" },
+    { "source": "/api/stocks/data/:symbol", "destination": "/api/stocks/data.js?symbol=:symbol" },
+    { "source": "/api/stocks/quotes", "destination": "/api/stocks/quotes.js" },
+    { "source": "/api/stocks/screen", "destination": "/api/stocks/screen.js" },
+    { "source": "/api/stocks/batch", "destination": "/api/stocks/batch.js" },
+    { "source": "/api/stocks/orderbook/:symbol", "destination": "/api/stocks/orderbook.js?symbol=:symbol" },
+    { "source": "/api/stocks/broker/:symbol", "destination": "/api/stocks/broker.js?symbol=:symbol" },
+    { "source": "/api/ai/models", "destination": "/api/ai/models.js" },
+    { "source": "/api/ai/analyze/:symbol", "destination": "/api/ai/analyze.js?symbol=:symbol" },
+    { "source": "/api/ai/compare", "destination": "/api/ai/compare.js" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "functions": {
+    "api/**/*.js": {
+      "maxDuration": 30
+    }
+  }
+}
