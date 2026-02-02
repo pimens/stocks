@@ -2,64 +2,142 @@ import { useState, useMemo } from 'react'
 import { stockApi } from '../services/api'
 import * as XLSX from 'xlsx'
 
-// Column groups for better organization
+// All available columns with descriptions
+const ALL_COLUMNS = {
+  // Basic Info
+  symbol: { label: 'Symbol', group: 'basic', desc: 'Kode saham' },
+  date: { label: 'Date (H)', group: 'basic', desc: 'Tanggal target (hari H)' },
+  prevDate: { label: 'Prev Date (H-1)', group: 'basic', desc: 'Tanggal indikator (H-1)' },
+  target: { label: 'Target', group: 'basic', desc: '1=Naik, 0=Turun' },
+  priceChange: { label: 'Price Change', group: 'basic', desc: 'Perubahan harga (Rp)' },
+  priceChangePercent: { label: 'Price Change %', group: 'basic', desc: 'Perubahan harga (%)' },
+  prevClose: { label: 'Prev Close', group: 'basic', desc: 'Harga close H-1' },
+  currentClose: { label: 'Current Close', group: 'basic', desc: 'Harga close hari H' },
+  prevOpen: { label: 'Prev Open', group: 'basic', desc: 'Harga open H-1' },
+  prevHigh: { label: 'Prev High', group: 'basic', desc: 'Harga high H-1' },
+  prevLow: { label: 'Prev Low', group: 'basic', desc: 'Harga low H-1' },
+  prevVolume: { label: 'Prev Volume', group: 'basic', desc: 'Volume H-1' },
+
+  // SMA
+  sma5: { label: 'SMA 5', group: 'sma', desc: 'Simple Moving Average 5 hari' },
+  sma10: { label: 'SMA 10', group: 'sma', desc: 'Simple Moving Average 10 hari' },
+  sma20: { label: 'SMA 20', group: 'sma', desc: 'Simple Moving Average 20 hari' },
+  sma50: { label: 'SMA 50', group: 'sma', desc: 'Simple Moving Average 50 hari' },
+  priceAboveSMA5: { label: 'Price > SMA5', group: 'sma', desc: '1 jika close > SMA5' },
+  priceAboveSMA10: { label: 'Price > SMA10', group: 'sma', desc: '1 jika close > SMA10' },
+  priceAboveSMA20: { label: 'Price > SMA20', group: 'sma', desc: '1 jika close > SMA20' },
+  priceAboveSMA50: { label: 'Price > SMA50', group: 'sma', desc: '1 jika close > SMA50' },
+  sma5AboveSMA10: { label: 'SMA5 > SMA10', group: 'sma', desc: '1 jika SMA5 > SMA10' },
+  sma10AboveSMA20: { label: 'SMA10 > SMA20', group: 'sma', desc: '1 jika SMA10 > SMA20' },
+  sma20AboveSMA50: { label: 'SMA20 > SMA50', group: 'sma', desc: '1 jika SMA20 > SMA50' },
+
+  // EMA
+  ema5: { label: 'EMA 5', group: 'ema', desc: 'Exponential Moving Average 5 hari' },
+  ema10: { label: 'EMA 10', group: 'ema', desc: 'Exponential Moving Average 10 hari' },
+  ema12: { label: 'EMA 12', group: 'ema', desc: 'Exponential Moving Average 12 hari' },
+  ema26: { label: 'EMA 26', group: 'ema', desc: 'Exponential Moving Average 26 hari' },
+  priceAboveEMA12: { label: 'Price > EMA12', group: 'ema', desc: '1 jika close > EMA12' },
+  priceAboveEMA26: { label: 'Price > EMA26', group: 'ema', desc: '1 jika close > EMA26' },
+
+  // RSI
+  rsi: { label: 'RSI', group: 'rsi', desc: 'Relative Strength Index (14)' },
+  rsiOversold: { label: 'RSI Oversold', group: 'rsi', desc: '1 jika RSI < 30' },
+  rsiOverbought: { label: 'RSI Overbought', group: 'rsi', desc: '1 jika RSI > 70' },
+  rsiNeutral: { label: 'RSI Neutral', group: 'rsi', desc: '1 jika 30 <= RSI <= 70' },
+
+  // MACD
+  macd: { label: 'MACD', group: 'macd', desc: 'MACD line' },
+  macdSignal: { label: 'MACD Signal', group: 'macd', desc: 'Signal line' },
+  macdHistogram: { label: 'MACD Histogram', group: 'macd', desc: 'Histogram (MACD - Signal)' },
+  macdBullish: { label: 'MACD Bullish', group: 'macd', desc: '1 jika MACD > Signal' },
+  macdPositive: { label: 'MACD Positive', group: 'macd', desc: '1 jika MACD > 0' },
+
+  // Bollinger Bands
+  bbUpper: { label: 'BB Upper', group: 'bollinger', desc: 'Bollinger Band atas' },
+  bbMiddle: { label: 'BB Middle', group: 'bollinger', desc: 'Bollinger Band tengah (SMA20)' },
+  bbLower: { label: 'BB Lower', group: 'bollinger', desc: 'Bollinger Band bawah' },
+  bbWidth: { label: 'BB Width %', group: 'bollinger', desc: 'Lebar BB dalam persen' },
+  priceBelowLowerBB: { label: 'Price < Lower BB', group: 'bollinger', desc: '1 jika close < BB bawah' },
+  priceAboveUpperBB: { label: 'Price > Upper BB', group: 'bollinger', desc: '1 jika close > BB atas' },
+
+  // Stochastic
+  stochK: { label: 'Stochastic %K', group: 'stochastic', desc: 'Stochastic %K' },
+  stochD: { label: 'Stochastic %D', group: 'stochastic', desc: 'Stochastic %D (signal)' },
+  stochOversold: { label: 'Stoch Oversold', group: 'stochastic', desc: '1 jika %K < 20' },
+  stochOverbought: { label: 'Stoch Overbought', group: 'stochastic', desc: '1 jika %K > 80' },
+  stochBullishCross: { label: 'Stoch Bullish Cross', group: 'stochastic', desc: '1 jika %K > %D' },
+
+  // ADX/DMI
+  adx: { label: 'ADX', group: 'adx', desc: 'Average Directional Index' },
+  pdi: { label: '+DI', group: 'adx', desc: 'Plus Directional Indicator' },
+  mdi: { label: '-DI', group: 'adx', desc: 'Minus Directional Indicator' },
+  strongTrend: { label: 'Strong Trend', group: 'adx', desc: '1 jika ADX > 25' },
+  bullishDI: { label: 'Bullish DI', group: 'adx', desc: '1 jika +DI > -DI' },
+
+  // Volatility
+  atr: { label: 'ATR', group: 'volatility', desc: 'Average True Range (14)' },
+  atrPercent: { label: 'ATR %', group: 'volatility', desc: 'ATR sebagai % dari harga' },
+
+  // Volume
+  obv: { label: 'OBV', group: 'volume', desc: 'On Balance Volume' },
+  volumeRatio: { label: 'Volume Ratio', group: 'volume', desc: 'Volume / Avg Volume (20)' },
+  highVolume: { label: 'High Volume', group: 'volume', desc: '1 jika volume > 1.5x rata-rata' },
+
+  // Williams %R
+  williamsR: { label: 'Williams %R', group: 'williams', desc: 'Williams %R (14)' },
+  williamsROversold: { label: 'Williams Oversold', group: 'williams', desc: '1 jika %R < -80' },
+  williamsROverbought: { label: 'Williams Overbought', group: 'williams', desc: '1 jika %R > -20' },
+
+  // CCI
+  cci: { label: 'CCI', group: 'cci', desc: 'Commodity Channel Index (20)' },
+  cciOversold: { label: 'CCI Oversold', group: 'cci', desc: '1 jika CCI < -100' },
+  cciOverbought: { label: 'CCI Overbought', group: 'cci', desc: '1 jika CCI > 100' },
+
+  // MFI
+  mfi: { label: 'MFI', group: 'mfi', desc: 'Money Flow Index (14)' },
+  mfiOversold: { label: 'MFI Oversold', group: 'mfi', desc: '1 jika MFI < 20' },
+  mfiOverbought: { label: 'MFI Overbought', group: 'mfi', desc: '1 jika MFI > 80' },
+
+  // ROC & Momentum
+  roc: { label: 'ROC', group: 'momentum', desc: 'Rate of Change (12)' },
+  rocPositive: { label: 'ROC Positive', group: 'momentum', desc: '1 jika ROC > 0' },
+  momentum: { label: 'Momentum', group: 'momentum', desc: 'Price Momentum (10)' },
+  momentumPositive: { label: 'Momentum Positive', group: 'momentum', desc: '1 jika Momentum > 0' },
+  pricePosition: { label: 'Price Position', group: 'momentum', desc: 'Posisi harga dalam range 20 hari (0-100)' },
+
+  // Candlestick
+  bodySize: { label: 'Body Size', group: 'candlestick', desc: 'Ukuran body candle' },
+  upperWick: { label: 'Upper Wick', group: 'candlestick', desc: 'Sumbu atas candle' },
+  lowerWick: { label: 'Lower Wick', group: 'candlestick', desc: 'Sumbu bawah candle' },
+  isBullishCandle: { label: 'Bullish Candle', group: 'candlestick', desc: '1 jika close > open' },
+  isDoji: { label: 'Doji', group: 'candlestick', desc: '1 jika body < 10% range' },
+  gapUp: { label: 'Gap Up', group: 'candlestick', desc: '1 jika open > prev close' },
+  gapDown: { label: 'Gap Down', group: 'candlestick', desc: '1 jika open < prev close' },
+
+  // Returns
+  return1d: { label: 'Return 1D', group: 'returns', desc: 'Return 1 hari sebelumnya (%)' },
+  return3d: { label: 'Return 3D', group: 'returns', desc: 'Return 3 hari sebelumnya (%)' },
+  return5d: { label: 'Return 5D', group: 'returns', desc: 'Return 5 hari sebelumnya (%)' },
+}
+
+// Group definitions
 const COLUMN_GROUPS = {
-  basic: {
-    label: 'Basic Info',
-    columns: ['symbol', 'date', 'prevDate', 'target', 'priceChange', 'priceChangePercent', 'prevClose', 'currentClose', 'prevOpen', 'prevHigh', 'prevLow', 'prevVolume']
-  },
-  sma: {
-    label: 'SMA Indicators',
-    columns: ['sma5', 'sma10', 'sma20', 'sma50', 'priceAboveSMA5', 'priceAboveSMA10', 'priceAboveSMA20', 'priceAboveSMA50', 'sma5AboveSMA10', 'sma10AboveSMA20', 'sma20AboveSMA50']
-  },
-  ema: {
-    label: 'EMA Indicators',
-    columns: ['ema5', 'ema10', 'ema12', 'ema26', 'priceAboveEMA12', 'priceAboveEMA26']
-  },
-  rsi: {
-    label: 'RSI Indicators',
-    columns: ['rsi', 'rsiOversold', 'rsiOverbought', 'rsiNeutral']
-  },
-  macd: {
-    label: 'MACD Indicators',
-    columns: ['macd', 'macdSignal', 'macdHistogram', 'macdBullish', 'macdPositive']
-  },
-  bollinger: {
-    label: 'Bollinger Bands',
-    columns: ['bbUpper', 'bbMiddle', 'bbLower', 'bbWidth', 'priceBelowLowerBB', 'priceAboveUpperBB']
-  },
-  stochastic: {
-    label: 'Stochastic',
-    columns: ['stochK', 'stochD', 'stochOversold', 'stochOverbought', 'stochBullishCross']
-  },
-  adx: {
-    label: 'ADX/DMI',
-    columns: ['adx', 'pdi', 'mdi', 'strongTrend', 'bullishDI']
-  },
-  volatility: {
-    label: 'Volatility',
-    columns: ['atr', 'atrPercent']
-  },
-  volume: {
-    label: 'Volume Indicators',
-    columns: ['obv', 'volumeRatio', 'highVolume']
-  },
-  oscillators: {
-    label: 'Other Oscillators',
-    columns: ['williamsR', 'williamsROversold', 'williamsROverbought', 'cci', 'cciOversold', 'cciOverbought', 'mfi', 'mfiOversold', 'mfiOverbought']
-  },
-  momentum: {
-    label: 'Momentum',
-    columns: ['roc', 'rocPositive', 'momentum', 'momentumPositive', 'pricePosition']
-  },
-  candlestick: {
-    label: 'Candlestick Patterns',
-    columns: ['bodySize', 'upperWick', 'lowerWick', 'isBullishCandle', 'isDoji', 'gapUp', 'gapDown']
-  },
-  returns: {
-    label: 'Historical Returns',
-    columns: ['return1d', 'return3d', 'return5d']
-  }
+  basic: { label: '📊 Basic Info', color: 'blue' },
+  sma: { label: '📈 SMA', color: 'green' },
+  ema: { label: '📉 EMA', color: 'teal' },
+  rsi: { label: '🔄 RSI', color: 'yellow' },
+  macd: { label: '📶 MACD', color: 'purple' },
+  bollinger: { label: '🎯 Bollinger Bands', color: 'pink' },
+  stochastic: { label: '⚡ Stochastic', color: 'orange' },
+  adx: { label: '💪 ADX/DMI', color: 'red' },
+  volatility: { label: '📊 Volatility', color: 'indigo' },
+  volume: { label: '📦 Volume', color: 'cyan' },
+  williams: { label: '〰️ Williams %R', color: 'lime' },
+  cci: { label: '🌊 CCI', color: 'amber' },
+  mfi: { label: '💰 MFI', color: 'emerald' },
+  momentum: { label: '🚀 Momentum', color: 'violet' },
+  candlestick: { label: '🕯️ Candlestick', color: 'rose' },
+  returns: { label: '📆 Returns', color: 'sky' },
 }
 
 const POPULAR_STOCKS = [
@@ -76,10 +154,94 @@ export default function RegressionData() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [data, setData] = useState(null)
-  const [visibleColumns, setVisibleColumns] = useState(['basic', 'rsi', 'macd', 'adx'])
+  
+  // Individual column selection
+  const [selectedColumns, setSelectedColumns] = useState(() => {
+    // Default: select basic, rsi, macd, adx columns
+    const defaults = ['basic', 'rsi', 'macd', 'adx']
+    const cols = new Set()
+    Object.entries(ALL_COLUMNS).forEach(([key, val]) => {
+      if (defaults.includes(val.group)) cols.add(key)
+    })
+    return cols
+  })
+  
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' })
   const [filterSymbol, setFilterSymbol] = useState('')
   const [filterTarget, setFilterTarget] = useState('all')
+  const [expandedGroups, setExpandedGroups] = useState(new Set(['basic']))
+
+  // Get columns by group
+  const getColumnsByGroup = (group) => {
+    return Object.entries(ALL_COLUMNS)
+      .filter(([_, val]) => val.group === group)
+      .map(([key, _]) => key)
+  }
+
+  // Check if all columns in a group are selected
+  const isGroupFullySelected = (group) => {
+    const groupCols = getColumnsByGroup(group)
+    return groupCols.every(col => selectedColumns.has(col))
+  }
+
+  // Check if some columns in a group are selected
+  const isGroupPartiallySelected = (group) => {
+    const groupCols = getColumnsByGroup(group)
+    const selectedCount = groupCols.filter(col => selectedColumns.has(col)).length
+    return selectedCount > 0 && selectedCount < groupCols.length
+  }
+
+  // Toggle a single column
+  const toggleColumn = (column) => {
+    setSelectedColumns(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(column)) {
+        newSet.delete(column)
+      } else {
+        newSet.add(column)
+      }
+      return newSet
+    })
+  }
+
+  // Toggle all columns in a group
+  const toggleGroup = (group) => {
+    const groupCols = getColumnsByGroup(group)
+    const allSelected = isGroupFullySelected(group)
+    
+    setSelectedColumns(prev => {
+      const newSet = new Set(prev)
+      if (allSelected) {
+        groupCols.forEach(col => newSet.delete(col))
+      } else {
+        groupCols.forEach(col => newSet.add(col))
+      }
+      return newSet
+    })
+  }
+
+  // Toggle group expansion
+  const toggleGroupExpansion = (group) => {
+    setExpandedGroups(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(group)) {
+        newSet.delete(group)
+      } else {
+        newSet.add(group)
+      }
+      return newSet
+    })
+  }
+
+  // Select all columns
+  const selectAllColumns = () => {
+    setSelectedColumns(new Set(Object.keys(ALL_COLUMNS)))
+  }
+
+  // Deselect all columns
+  const deselectAllColumns = () => {
+    setSelectedColumns(new Set())
+  }
 
   // Get default dates (last 3 months)
   const getDefaultDates = () => {
@@ -104,25 +266,22 @@ export default function RegressionData() {
     setSelectedStocks(selectedStocks.filter(s => s !== stock))
   }
 
-  const handleSelectAll = () => {
+  const handleSelectAllStocks = () => {
     setSelectedStocks([...new Set([...selectedStocks, ...POPULAR_STOCKS])])
   }
 
-  const handleClearAll = () => {
+  const handleClearAllStocks = () => {
     setSelectedStocks([])
-  }
-
-  const toggleColumnGroup = (group) => {
-    if (visibleColumns.includes(group)) {
-      setVisibleColumns(visibleColumns.filter(g => g !== group))
-    } else {
-      setVisibleColumns([...visibleColumns, group])
-    }
   }
 
   const handleFetchData = async () => {
     if (selectedStocks.length === 0) {
       setError('Silakan pilih minimal satu saham')
+      return
+    }
+
+    if (selectedColumns.size === 0) {
+      setError('Silakan pilih minimal satu kolom')
       return
     }
 
@@ -149,16 +308,10 @@ export default function RegressionData() {
     }
   }
 
-  // Get visible columns based on selected groups
+  // Get visible columns array
   const displayColumns = useMemo(() => {
-    const cols = []
-    visibleColumns.forEach(group => {
-      if (COLUMN_GROUPS[group]) {
-        cols.push(...COLUMN_GROUPS[group].columns)
-      }
-    })
-    return cols
-  }, [visibleColumns])
+    return Array.from(selectedColumns)
+  }, [selectedColumns])
 
   // Filter and sort data
   const processedData = useMemo(() => {
@@ -166,18 +319,15 @@ export default function RegressionData() {
     
     let filtered = [...data.data]
     
-    // Filter by symbol
     if (filterSymbol) {
       filtered = filtered.filter(row => row.symbol.includes(filterSymbol.toUpperCase()))
     }
     
-    // Filter by target
     if (filterTarget !== 'all') {
       const targetValue = filterTarget === 'up' ? 1 : 0
       filtered = filtered.filter(row => row.target === targetValue)
     }
     
-    // Sort
     if (sortConfig.key) {
       filtered.sort((a, b) => {
         const aVal = a[sortConfig.key]
@@ -211,24 +361,32 @@ export default function RegressionData() {
   const exportToExcel = () => {
     if (!data?.data || data.data.length === 0) return
 
-    // Create worksheet from all data
-    const ws = XLSX.utils.json_to_sheet(data.data)
-    
-    // Create workbook
+    const filteredData = data.data.map(row => {
+      const newRow = {}
+      displayColumns.forEach(col => {
+        newRow[col] = row[col]
+      })
+      return newRow
+    })
+
+    const ws = XLSX.utils.json_to_sheet(filteredData)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Regression Data')
     
-    // Add summary sheet
     const summaryData = [
       ['Summary Statistics'],
       ['Total Records', data.summary.totalRecords],
       ['Symbols Processed', data.summary.symbolsProcessed],
       ['Date Range', `${data.summary.dateRange.start} to ${data.summary.dateRange.end}`],
+      ['Columns Selected', displayColumns.length],
       [''],
       ['Target Distribution'],
       ['Up (1)', data.summary.targetDistribution.up],
       ['Down (0)', data.summary.targetDistribution.down],
       ['Up Percentage', `${data.summary.targetDistribution.upPercent}%`],
+      [''],
+      ['Selected Columns'],
+      ...displayColumns.map(col => [col, ALL_COLUMNS[col]?.desc || ''])
     ]
     
     if (data.summary.errors) {
@@ -241,30 +399,23 @@ export default function RegressionData() {
     const summaryWs = XLSX.utils.aoa_to_sheet(summaryData)
     XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary')
     
-    // Generate filename with date
-    const filename = `regression_data_${selectedStocks.join('_')}_${startDate}_${endDate}.xlsx`
-    
-    // Download
+    const filename = `regression_data_${selectedStocks.slice(0, 3).join('_')}${selectedStocks.length > 3 ? '_etc' : ''}_${startDate}_${endDate}.xlsx`
     XLSX.writeFile(wb, filename)
   }
 
   const formatValue = (value, key) => {
     if (value === null || value === undefined) return '-'
     
-    // Format numbers
     if (typeof value === 'number') {
-      // Percentage values
-      if (key.includes('Percent') || key.includes('percent')) {
+      if (key.includes('Percent') || key.includes('percent') || key === 'roc' || key.includes('return')) {
         return `${value.toFixed(2)}%`
       }
-      // Large numbers
       if (Math.abs(value) >= 1000000) {
         return (value / 1000000).toFixed(2) + 'M'
       }
       if (Math.abs(value) >= 1000) {
         return (value / 1000).toFixed(2) + 'K'
       }
-      // Decimal values
       if (!Number.isInteger(value)) {
         return value.toFixed(2)
       }
@@ -295,7 +446,6 @@ export default function RegressionData() {
       <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6">
         <h3 className="text-lg font-semibold text-white mb-4">1. Pilih Saham</h3>
         
-        {/* Custom input */}
         <div className="flex gap-2 mb-4">
           <input
             type="text"
@@ -313,23 +463,21 @@ export default function RegressionData() {
           </button>
         </div>
 
-        {/* Quick select buttons */}
         <div className="flex flex-wrap gap-2 mb-4">
           <button
-            onClick={handleSelectAll}
+            onClick={handleSelectAllStocks}
             className="px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition"
           >
             Pilih Semua Populer
           </button>
           <button
-            onClick={handleClearAll}
+            onClick={handleClearAllStocks}
             className="px-3 py-1 text-sm bg-gray-600 hover:bg-gray-700 text-white rounded transition"
           >
             Hapus Semua
           </button>
         </div>
 
-        {/* Popular stocks grid */}
         <div className="flex flex-wrap gap-2 mb-4">
           {POPULAR_STOCKS.map(stock => (
             <button
@@ -346,7 +494,6 @@ export default function RegressionData() {
           ))}
         </div>
 
-        {/* Selected stocks */}
         {selectedStocks.length > 0 && (
           <div className="mt-4">
             <p className="text-sm text-gray-400 mb-2">Saham terpilih ({selectedStocks.length}):</p>
@@ -398,23 +545,98 @@ export default function RegressionData() {
         </p>
       </div>
 
-      {/* Column Selection */}
+      {/* Column Selection with Checkboxes */}
       <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">3. Pilih Kolom Indikator</h3>
-        <div className="flex flex-wrap gap-2">
-          {Object.entries(COLUMN_GROUPS).map(([key, group]) => (
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold text-white">3. Pilih Kolom/Fitur ({selectedColumns.size} terpilih)</h3>
+          <div className="flex gap-2">
             <button
-              key={key}
-              onClick={() => toggleColumnGroup(key)}
-              className={`px-3 py-2 text-sm rounded-lg transition ${
-                visibleColumns.includes(key)
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
+              onClick={selectAllColumns}
+              className="px-3 py-1 text-sm bg-green-600 hover:bg-green-700 text-white rounded transition"
             >
-              {group.label} ({group.columns.length})
+              Pilih Semua
             </button>
-          ))}
+            <button
+              onClick={deselectAllColumns}
+              className="px-3 py-1 text-sm bg-gray-600 hover:bg-gray-700 text-white rounded transition"
+            >
+              Hapus Semua
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
+          {Object.entries(COLUMN_GROUPS).map(([groupKey, groupInfo]) => {
+            const groupCols = getColumnsByGroup(groupKey)
+            const isExpanded = expandedGroups.has(groupKey)
+            const isFullySelected = isGroupFullySelected(groupKey)
+            const isPartiallySelected = isGroupPartiallySelected(groupKey)
+            const selectedInGroup = groupCols.filter(col => selectedColumns.has(col)).length
+            
+            return (
+              <div key={groupKey} className="border border-gray-600 rounded-lg overflow-hidden">
+                {/* Group Header */}
+                <div 
+                  className="flex items-center gap-3 px-4 py-3 bg-gray-700/50 cursor-pointer hover:bg-gray-700"
+                >
+                  <input
+                    type="checkbox"
+                    checked={isFullySelected}
+                    ref={el => {
+                      if (el) el.indeterminate = isPartiallySelected
+                    }}
+                    onChange={() => toggleGroup(groupKey)}
+                    className="w-4 h-4 rounded border-gray-500 text-purple-600 focus:ring-purple-500 focus:ring-offset-gray-800 cursor-pointer"
+                  />
+                  <div 
+                    className="flex-1 flex items-center gap-2"
+                    onClick={() => toggleGroupExpansion(groupKey)}
+                  >
+                    <span className="font-medium text-white">{groupInfo.label}</span>
+                    <span className="text-sm text-gray-400">
+                      ({selectedInGroup}/{groupCols.length})
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => toggleGroupExpansion(groupKey)}
+                    className="p-1 hover:bg-gray-600 rounded"
+                  >
+                    <svg 
+                      className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} 
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Individual Columns */}
+                {isExpanded && (
+                  <div className="p-4 bg-gray-800/30 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {groupCols.map(col => (
+                      <label 
+                        key={col} 
+                        className="flex items-start gap-2 p-2 rounded hover:bg-gray-700/50 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedColumns.has(col)}
+                          onChange={() => toggleColumn(col)}
+                          className="w-4 h-4 mt-0.5 rounded border-gray-500 text-purple-600 focus:ring-purple-500 focus:ring-offset-gray-800"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm text-white block">{ALL_COLUMNS[col].label}</span>
+                          <span className="text-xs text-gray-500 block truncate">{ALL_COLUMNS[col].desc}</span>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       </div>
 
@@ -422,7 +644,7 @@ export default function RegressionData() {
       <div className="flex justify-center">
         <button
           onClick={handleFetchData}
-          disabled={loading || selectedStocks.length === 0}
+          disabled={loading || selectedStocks.length === 0 || selectedColumns.size === 0}
           className="px-8 py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:from-gray-600 disabled:to-gray-600 text-white font-semibold rounded-lg transition shadow-lg disabled:cursor-not-allowed"
         >
           {loading ? (
@@ -464,7 +686,7 @@ export default function RegressionData() {
               </button>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <div className="bg-gray-700/50 rounded-lg p-4">
                 <p className="text-gray-400 text-sm">Total Records</p>
                 <p className="text-2xl font-bold text-white">{data.summary.totalRecords.toLocaleString()}</p>
@@ -472,6 +694,10 @@ export default function RegressionData() {
               <div className="bg-gray-700/50 rounded-lg p-4">
                 <p className="text-gray-400 text-sm">Saham Diproses</p>
                 <p className="text-2xl font-bold text-white">{data.summary.symbolsProcessed}</p>
+              </div>
+              <div className="bg-gray-700/50 rounded-lg p-4">
+                <p className="text-gray-400 text-sm">Kolom Terpilih</p>
+                <p className="text-2xl font-bold text-white">{selectedColumns.size}</p>
               </div>
               <div className="bg-green-900/30 rounded-lg p-4">
                 <p className="text-gray-400 text-sm">Target Naik (1)</p>
@@ -541,9 +767,10 @@ export default function RegressionData() {
                         key={col}
                         onClick={() => handleSort(col)}
                         className="px-3 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-700/50 whitespace-nowrap"
+                        title={ALL_COLUMNS[col]?.desc}
                       >
                         <span className="flex items-center gap-1">
-                          {col}
+                          {ALL_COLUMNS[col]?.label || col}
                           {sortConfig.key === col && (
                             <span>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
                           )}
@@ -582,66 +809,6 @@ export default function RegressionData() {
                 Menampilkan 500 dari {processedData.length.toLocaleString()} records. Export ke Excel untuk melihat semua data.
               </div>
             )}
-          </div>
-
-          {/* Column Legend */}
-          <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-white mb-4">📚 Penjelasan Kolom</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
-              <div>
-                <h4 className="font-semibold text-purple-400 mb-2">Target & Harga</h4>
-                <ul className="space-y-1 text-gray-400">
-                  <li><code className="text-yellow-400">target</code>: 1=Naik, 0=Turun (hari H)</li>
-                  <li><code className="text-yellow-400">prevClose</code>: Harga close H-1</li>
-                  <li><code className="text-yellow-400">currentClose</code>: Harga close hari H</li>
-                </ul>
-              </div>
-              <div>
-                <h4 className="font-semibold text-purple-400 mb-2">Moving Averages</h4>
-                <ul className="space-y-1 text-gray-400">
-                  <li><code className="text-yellow-400">sma5/10/20/50</code>: Simple MA</li>
-                  <li><code className="text-yellow-400">ema5/10/12/26</code>: Exponential MA</li>
-                  <li><code className="text-yellow-400">priceAboveSMA*</code>: Signal binary</li>
-                </ul>
-              </div>
-              <div>
-                <h4 className="font-semibold text-purple-400 mb-2">Oscillators</h4>
-                <ul className="space-y-1 text-gray-400">
-                  <li><code className="text-yellow-400">rsi</code>: Relative Strength Index</li>
-                  <li><code className="text-yellow-400">stochK/D</code>: Stochastic</li>
-                  <li><code className="text-yellow-400">williamsR</code>: Williams %R</li>
-                  <li><code className="text-yellow-400">cci</code>: Commodity Channel Index</li>
-                  <li><code className="text-yellow-400">mfi</code>: Money Flow Index</li>
-                </ul>
-              </div>
-              <div>
-                <h4 className="font-semibold text-purple-400 mb-2">MACD</h4>
-                <ul className="space-y-1 text-gray-400">
-                  <li><code className="text-yellow-400">macd</code>: MACD line</li>
-                  <li><code className="text-yellow-400">macdSignal</code>: Signal line</li>
-                  <li><code className="text-yellow-400">macdHistogram</code>: Histogram</li>
-                  <li><code className="text-yellow-400">macdBullish</code>: MACD &gt; Signal</li>
-                </ul>
-              </div>
-              <div>
-                <h4 className="font-semibold text-purple-400 mb-2">Volatility & Volume</h4>
-                <ul className="space-y-1 text-gray-400">
-                  <li><code className="text-yellow-400">atr</code>: Average True Range</li>
-                  <li><code className="text-yellow-400">bbWidth</code>: Bollinger Band Width</li>
-                  <li><code className="text-yellow-400">obv</code>: On Balance Volume</li>
-                  <li><code className="text-yellow-400">volumeRatio</code>: Vol vs Avg</li>
-                </ul>
-              </div>
-              <div>
-                <h4 className="font-semibold text-purple-400 mb-2">Trend & Momentum</h4>
-                <ul className="space-y-1 text-gray-400">
-                  <li><code className="text-yellow-400">adx</code>: Trend strength</li>
-                  <li><code className="text-yellow-400">pdi/mdi</code>: +DI/-DI</li>
-                  <li><code className="text-yellow-400">roc</code>: Rate of Change</li>
-                  <li><code className="text-yellow-400">momentum</code>: Price momentum</li>
-                </ul>
-              </div>
-            </div>
           </div>
         </div>
       )}
