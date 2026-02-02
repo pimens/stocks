@@ -45,6 +45,16 @@ export const stockApi = {
   getBrokerSummary: async (symbol) => {
     const response = await axios.get(`${API_BASE}/stocks/broker/${symbol}`)
     return response.data
+  },
+
+  // Get regression data with indicators for multiple stocks
+  getRegressionData: async (symbols, startDate, endDate) => {
+    const response = await axios.post(`${API_BASE}/stocks/regression-data`, {
+      symbols,
+      startDate,
+      endDate
+    })
+    return response.data
   }
 }
 

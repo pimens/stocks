@@ -7,6 +7,7 @@ import ScreenerPresets from './components/ScreenerPresets'
 import StockList from './components/StockList'
 import StockDetail from './components/StockDetail'
 import AIAnalysis from './components/AIAnalysis'
+import RegressionData from './components/RegressionData'
 
 function App() {
   const [selectedStocks, setSelectedStocks] = useState([])
@@ -74,6 +75,10 @@ function App() {
             selectedStocks={selectedStocks}
             stockData={stockData}
           />
+        )}
+
+        {activeTab === 'regression' && (
+          <RegressionData />
         )}
       </main>
       

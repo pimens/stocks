@@ -165,4 +165,81 @@ router.get('/broker/:symbol', async (req, res) => {
   }
 });
 
+// Get historical data with indicators for regression analysis
+router.post('/regression-data', async (req, res) => {
+  try {
+    const { symbols, startDate, endDate } = req.body;
+    
+    if (!symbols || !Array.isArray(symbols) || symbols.length === 0) {
+      return res.status(400).json({ error: 'Please provide an array of stock symbols' });
+    }
+    
+    if (!startDate || !endDate) {
+      return res.status(400).json({ error: 'Please provide startDate and endDate' });
+    }
+
+    const allData = [];
+    const errors = [];
+
+    for (const symbol of symbols) {
+      try {
+        // Get longer range to ensure we have enough data for indicators
+        const stockData = await stockService.getStockData(symbol, '1y', '1d');
+        
+        if (!stockData.prices || stockData.prices.length < 60) {
+          errors.push({ symbol, error: 'Not enough historical data' });
+          continue;
+        }
+
+        const dataset = indicatorService.generateRegressionDataset(
+          stockData.prices,
+          startDate,
+          endDate
+        );
+
+        // Add symbol to each row
+        const dataWithSymbol = dataset.map(row => ({
+          symbol: symbol.toUpperCase(),
+          ...row
+        }));
+
+        allData.push(...dataWithSymbol);
+      } catch (err) {
+        console.error(`Error processing ${symbol}:`, err.message);
+        errors.push({ symbol, error: err.message });
+      }
+    }
+
+    // Sort by symbol then date
+    allData.sort((a, b) => {
+      if (a.symbol !== b.symbol) return a.symbol.localeCompare(b.symbol);
+      return new Date(a.date) - new Date(b.date);
+    });
+
+    // Calculate summary statistics
+    const summary = {
+      totalRecords: allData.length,
+      symbolsProcessed: [...new Set(allData.map(d => d.symbol))].length,
+      dateRange: {
+        start: startDate,
+        end: endDate
+      },
+      targetDistribution: {
+        up: allData.filter(d => d.target === 1).length,
+        down: allData.filter(d => d.target === 0).length,
+        upPercent: allData.length > 0 ? (allData.filter(d => d.target === 1).length / allData.length * 100).toFixed(2) : 0
+      },
+      errors: errors.length > 0 ? errors : undefined
+    };
+
+    res.json({
+      summary,
+      data: allData,
+      columns: allData.length > 0 ? Object.keys(allData[0]) : []
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;
