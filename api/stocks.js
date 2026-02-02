@@ -1,6 +1,6 @@
 const path = require('path');
-const stockService = require(path.join(__dirname, './lib/stockService'));
-const indicatorService = require(path.join(__dirname, './lib/indicatorService'));
+const stockService = require(path.join(__dirname, '../lib/stockService'));
+const indicatorService = require(path.join(__dirname, '../lib/indicatorService'));
 
 module.exports = async (req, res) => {
   // Enable CORS
