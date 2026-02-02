@@ -4,7 +4,6 @@
   "outputDirectory": "client/dist",
   "installCommand": "npm install && cd client && npm install",
   "framework": null,
-  "packageManager": "npm",
   "rewrites": [
     { "source": "/api/health", "destination": "/api/health.js" },
     { "source": "/api/stocks/popular", "destination": "/api/stocks/popular.js" },
