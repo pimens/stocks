@@ -1,7 +1,6 @@
-const path = require('path');
-const stockService = require(path.join(__dirname, '../../lib/stockService'));
-const indicatorService = require(path.join(__dirname, '../../lib/indicatorService'));
-const aiService = require(path.join(__dirname, '../../lib/aiService'));
+const stockService = require('./stockService');
+const indicatorService = require('./indicatorService');
+const aiService = require('./aiService');
 
 exports.handler = async (event, context) => {
   const headers = {
