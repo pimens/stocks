@@ -48,11 +48,15 @@ export const stockApi = {
   },
 
   // Get regression data with indicators for multiple stocks
-  getRegressionData: async (symbols, startDate, endDate) => {
+  getRegressionData: async (symbols, startDate, endDate, options = {}) => {
+    const { upThreshold = 1.0, downThreshold = -0.5, includeNeutral = false } = options
     const response = await axios.post(`${API_BASE}/stocks/regression-data`, {
       symbols,
       startDate,
-      endDate
+      endDate,
+      upThreshold,
+      downThreshold,
+      includeNeutral
     })
     return response.data
   }

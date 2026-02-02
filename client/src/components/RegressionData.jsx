@@ -8,7 +8,8 @@ const ALL_COLUMNS = {
   symbol: { label: 'Symbol', group: 'basic', desc: 'Kode saham' },
   date: { label: 'Date (H)', group: 'basic', desc: 'Tanggal target (hari H)' },
   prevDate: { label: 'Prev Date (H-1)', group: 'basic', desc: 'Tanggal indikator (H-1)' },
-  target: { label: 'Target', group: 'basic', desc: '1=Naik, 0=Turun' },
+  target: { label: 'Target', group: 'basic', desc: '1=UP, 0=DOWN, -1=Neutral' },
+  targetLabel: { label: 'Target Label', group: 'basic', desc: 'Label target: UP/DOWN/NEUTRAL' },
   priceChange: { label: 'Price Change', group: 'basic', desc: 'Perubahan harga (Rp)' },
   priceChangePercent: { label: 'Price Change %', group: 'basic', desc: 'Perubahan harga (%)' },
   prevClose: { label: 'Prev Close', group: 'basic', desc: 'Harga close H-1' },
@@ -17,6 +18,23 @@ const ALL_COLUMNS = {
   prevHigh: { label: 'Prev High', group: 'basic', desc: 'Harga high H-1' },
   prevLow: { label: 'Prev Low', group: 'basic', desc: 'Harga low H-1' },
   prevVolume: { label: 'Prev Volume', group: 'basic', desc: 'Volume H-1' },
+
+  // ML-Friendly Features (NEW!)
+  closePosition: { label: 'Close Position', group: 'mlfeatures', desc: '(close-low)/(high-low), 0-1 scale' },
+  bodyRangeRatio: { label: 'Body/Range Ratio', group: 'mlfeatures', desc: 'abs(close-open)/(high-low)' },
+  upperWickRatio: { label: 'Upper Wick Ratio', group: 'mlfeatures', desc: 'Upper wick / range' },
+  lowerWickRatio: { label: 'Lower Wick Ratio', group: 'mlfeatures', desc: 'Lower wick / range' },
+  distFromSMA5: { label: 'Dist from SMA5 %', group: 'mlfeatures', desc: 'Jarak dari SMA5 dalam %' },
+  distFromSMA20: { label: 'Dist from SMA20 %', group: 'mlfeatures', desc: 'Jarak dari SMA20 dalam %' },
+  distFromSMA50: { label: 'Dist from SMA50 %', group: 'mlfeatures', desc: 'Jarak dari SMA50 dalam %' },
+
+  // Delta/Change Indicators (NEW!)
+  deltaRSI: { label: 'ΔRSI', group: 'delta', desc: 'Perubahan RSI dari hari sebelumnya' },
+  deltaMACDHist: { label: 'ΔMACD Hist', group: 'delta', desc: 'Perubahan MACD Histogram (slope)' },
+  deltaStochK: { label: 'ΔStoch %K', group: 'delta', desc: 'Perubahan Stochastic %K' },
+  deltaADX: { label: 'ΔADX', group: 'delta', desc: 'Perubahan ADX' },
+  deltaCCI: { label: 'ΔCCI', group: 'delta', desc: 'Perubahan CCI' },
+  deltaMFI: { label: 'ΔMFI', group: 'delta', desc: 'Perubahan MFI' },
 
   // SMA
   sma5: { label: 'SMA 5', group: 'sma', desc: 'Simple Moving Average 5 hari' },
@@ -125,6 +143,8 @@ const ALL_COLUMNS = {
 // Group definitions
 const COLUMN_GROUPS = {
   basic: { label: '📊 Basic Info', color: 'blue' },
+  mlfeatures: { label: '🤖 ML Features', color: 'fuchsia' },
+  delta: { label: '📐 Delta/Change', color: 'cyan' },
   sma: { label: '📈 SMA', color: 'green' },
   ema: { label: '📉 EMA', color: 'teal' },
   rsi: { label: '🔄 RSI', color: 'yellow' },
@@ -157,10 +177,15 @@ export default function RegressionData() {
   const [error, setError] = useState(null)
   const [data, setData] = useState(null)
   
+  // Threshold settings for ML target
+  const [upThreshold, setUpThreshold] = useState(1.0)      // +1% for UP
+  const [downThreshold, setDownThreshold] = useState(-0.5) // -0.5% for DOWN
+  const [includeNeutral, setIncludeNeutral] = useState(false)
+  
   // Individual column selection
   const [selectedColumns, setSelectedColumns] = useState(() => {
-    // Default: select basic, rsi, macd, adx columns
-    const defaults = ['basic', 'rsi', 'macd', 'adx']
+    // Default: select basic, mlfeatures, delta, rsi, macd, adx columns
+    const defaults = ['basic', 'mlfeatures', 'delta', 'rsi', 'macd', 'adx']
     const cols = new Set()
     Object.entries(ALL_COLUMNS).forEach(([key, val]) => {
       if (defaults.includes(val.group)) cols.add(key)
@@ -171,7 +196,7 @@ export default function RegressionData() {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' })
   const [filterSymbol, setFilterSymbol] = useState('')
   const [filterTarget, setFilterTarget] = useState('all')
-  const [expandedGroups, setExpandedGroups] = useState(new Set(['basic']))
+  const [expandedGroups, setExpandedGroups] = useState(new Set(['basic', 'mlfeatures', 'delta']))
 
   // Get columns by group
   const getColumnsByGroup = (group) => {
@@ -300,7 +325,8 @@ export default function RegressionData() {
       const result = await stockApi.getRegressionData(
         selectedStocks,
         startDate || getDefaultDates().start,
-        endDate || getDefaultDates().end
+        endDate || getDefaultDates().end,
+        { upThreshold, downThreshold, includeNeutral }
       )
       setData(result)
     } catch (err) {
@@ -326,8 +352,13 @@ export default function RegressionData() {
     }
     
     if (filterTarget !== 'all') {
-      const targetValue = filterTarget === 'up' ? 1 : 0
-      filtered = filtered.filter(row => row.target === targetValue)
+      if (filterTarget === 'up') {
+        filtered = filtered.filter(row => row.target === 1)
+      } else if (filterTarget === 'down') {
+        filtered = filtered.filter(row => row.target === 0)
+      } else if (filterTarget === 'neutral') {
+        filtered = filtered.filter(row => row.target === -1)
+      }
     }
     
     if (sortConfig.key) {
@@ -382,10 +413,17 @@ export default function RegressionData() {
       ['Date Range', `${data.summary.dateRange.start} to ${data.summary.dateRange.end}`],
       ['Columns Selected', displayColumns.length],
       [''],
+      ['Threshold Settings'],
+      ['Up Threshold', `≥${data.summary.thresholds?.upThreshold || upThreshold}%`],
+      ['Down Threshold', `≤${data.summary.thresholds?.downThreshold || downThreshold}%`],
+      ['Include Neutral', data.summary.thresholds?.includeNeutral ? 'Yes' : 'No'],
+      [''],
       ['Target Distribution'],
-      ['Up (1)', data.summary.targetDistribution.up],
-      ['Down (0)', data.summary.targetDistribution.down],
-      ['Up Percentage', `${data.summary.targetDistribution.upPercent}%`],
+      ['UP (1)', data.summary.targetDistribution.up],
+      ['DOWN (0)', data.summary.targetDistribution.down],
+      ['NEUTRAL (-1)', data.summary.targetDistribution.neutral || 0],
+      ['UP Percentage', `${data.summary.targetDistribution.upPercent}%`],
+      ['DOWN Percentage', `${data.summary.targetDistribution.downPercent}%`],
       [''],
       ['Selected Columns'],
       ...displayColumns.map(col => [col, ALL_COLUMNS[col]?.desc || ''])
@@ -426,11 +464,14 @@ export default function RegressionData() {
     return value
   }
 
-  const getTargetBadge = (target) => {
+  const getTargetBadge = (target, label) => {
     if (target === 1) {
-      return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-900/50 text-green-400">↑ NAIK</span>
+      return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-900/50 text-green-400">↑ UP</span>
     }
-    return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-900/50 text-red-400">↓ TURUN</span>
+    if (target === -1) {
+      return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-900/50 text-yellow-400">⚖️ NEUTRAL</span>
+    }
+    return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-900/50 text-red-400">↓ DOWN</span>
   }
 
   return (
@@ -545,6 +586,84 @@ export default function RegressionData() {
         <p className="text-xs text-gray-500 mt-2">
           * Jika tidak diisi, akan menggunakan 3 bulan terakhir
         </p>
+      </div>
+
+      {/* Threshold Settings for ML Target */}
+      <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">2.5. Konfigurasi Target ML</h3>
+        <p className="text-sm text-gray-400 mb-4">
+          Tentukan threshold untuk klasifikasi UP/DOWN. Data dengan return di antara keduanya akan dikategorikan sebagai NEUTRAL.
+        </p>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm text-gray-400 mb-2">
+              UP Threshold (≥)
+              <span className="text-green-400 ml-1">↑</span>
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                step="0.1"
+                value={upThreshold}
+                onChange={(e) => setUpThreshold(parseFloat(e.target.value) || 0)}
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-green-500"
+              />
+              <span className="text-gray-400">%</span>
+            </div>
+            <p className="text-xs text-green-400/70 mt-1">Return ≥ {upThreshold}% = UP</p>
+          </div>
+          
+          <div>
+            <label className="block text-sm text-gray-400 mb-2">
+              DOWN Threshold (≤)
+              <span className="text-red-400 ml-1">↓</span>
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                step="0.1"
+                value={downThreshold}
+                onChange={(e) => setDownThreshold(parseFloat(e.target.value) || 0)}
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-red-500"
+              />
+              <span className="text-gray-400">%</span>
+            </div>
+            <p className="text-xs text-red-400/70 mt-1">Return ≤ {downThreshold}% = DOWN</p>
+          </div>
+          
+          <div>
+            <label className="block text-sm text-gray-400 mb-2">
+              Sertakan NEUTRAL
+              <span className="text-yellow-400 ml-1">⚖️</span>
+            </label>
+            <div className="flex items-center gap-3 mt-3">
+              <label className="inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={includeNeutral}
+                  onChange={(e) => setIncludeNeutral(e.target.checked)}
+                  className="w-5 h-5 rounded border-gray-500 text-purple-600 focus:ring-purple-500 focus:ring-offset-gray-800"
+                />
+                <span className="ml-2 text-white">{includeNeutral ? 'Ya' : 'Tidak'}</span>
+              </label>
+            </div>
+            <p className="text-xs text-yellow-400/70 mt-1">
+              {includeNeutral ? 'Data neutral akan disertakan' : 'Data neutral akan dibuang'}
+            </p>
+          </div>
+        </div>
+        
+        <div className="mt-4 p-3 bg-gray-900/50 rounded-lg border border-gray-600">
+          <p className="text-xs text-gray-400">
+            <span className="font-semibold text-purple-400">💡 Tips ML:</span> Untuk trading, disarankan:
+          </p>
+          <ul className="text-xs text-gray-400 mt-1 space-y-1">
+            <li>• <span className="text-green-400">UP ≥ +1%</span> → Cukup signifikan untuk profit setelah fee</li>
+            <li>• <span className="text-red-400">DOWN ≤ -0.5%</span> → Lebih sensitif untuk cut loss</li>
+            <li>• <span className="text-yellow-400">NEUTRAL</span> → Buang karena tidak tradeable</li>
+          </ul>
+        </div>
       </div>
 
       {/* Column Selection with Checkboxes */}
@@ -688,7 +807,7 @@ export default function RegressionData() {
               </button>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
               <div className="bg-gray-700/50 rounded-lg p-4">
                 <p className="text-gray-400 text-sm">Total Records</p>
                 <p className="text-2xl font-bold text-white">{data.summary.totalRecords.toLocaleString()}</p>
@@ -702,20 +821,38 @@ export default function RegressionData() {
                 <p className="text-2xl font-bold text-white">{selectedColumns.size}</p>
               </div>
               <div className="bg-green-900/30 rounded-lg p-4">
-                <p className="text-gray-400 text-sm">Target Naik (1)</p>
+                <p className="text-gray-400 text-sm">Target UP (1)</p>
                 <p className="text-2xl font-bold text-green-400">
                   {data.summary.targetDistribution.up.toLocaleString()}
                   <span className="text-sm ml-1">({data.summary.targetDistribution.upPercent}%)</span>
                 </p>
               </div>
               <div className="bg-red-900/30 rounded-lg p-4">
-                <p className="text-gray-400 text-sm">Target Turun (0)</p>
+                <p className="text-gray-400 text-sm">Target DOWN (0)</p>
                 <p className="text-2xl font-bold text-red-400">
                   {data.summary.targetDistribution.down.toLocaleString()}
-                  <span className="text-sm ml-1">({(100 - parseFloat(data.summary.targetDistribution.upPercent)).toFixed(2)}%)</span>
+                  <span className="text-sm ml-1">({data.summary.targetDistribution.downPercent}%)</span>
+                </p>
+              </div>
+              <div className="bg-yellow-900/30 rounded-lg p-4">
+                <p className="text-gray-400 text-sm">NEUTRAL (-1)</p>
+                <p className="text-2xl font-bold text-yellow-400">
+                  {(data.summary.targetDistribution.neutral || 0).toLocaleString()}
                 </p>
               </div>
             </div>
+
+            {/* Threshold Info */}
+            {data.summary.thresholds && (
+              <div className="mt-4 p-3 bg-purple-900/20 border border-purple-500/30 rounded-lg">
+                <p className="text-purple-400 text-sm font-semibold mb-1">🎯 Threshold yang digunakan:</p>
+                <p className="text-purple-300 text-xs">
+                  UP: ≥{data.summary.thresholds.upThreshold}% | 
+                  DOWN: ≤{data.summary.thresholds.downThreshold}% | 
+                  Include Neutral: {data.summary.thresholds.includeNeutral ? 'Ya' : 'Tidak'}
+                </p>
+              </div>
+            )}
 
             {data.summary.errors && data.summary.errors.length > 0 && (
               <div className="mt-4 p-3 bg-yellow-900/30 border border-yellow-500/30 rounded-lg">
@@ -748,8 +885,9 @@ export default function RegressionData() {
                   className="bg-gray-700 border border-gray-600 rounded px-3 py-1 text-white text-sm focus:outline-none focus:border-purple-500"
                 >
                   <option value="all">Semua</option>
-                  <option value="up">Naik (1)</option>
-                  <option value="down">Turun (0)</option>
+                  <option value="up">UP (1)</option>
+                  <option value="down">DOWN (0)</option>
+                  <option value="neutral">NEUTRAL (-1)</option>
                 </select>
               </div>
               <div className="ml-auto text-sm text-gray-400">

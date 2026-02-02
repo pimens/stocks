@@ -498,11 +498,18 @@ class IndicatorService {
   }
 
   // Generate regression dataset with indicators from H-1 and target from H
-  generateRegressionDataset(prices, startDate, endDate) {
+  // Options: { upThreshold: 1.0, downThreshold: -0.5, includeNeutral: false }
+  generateRegressionDataset(prices, startDate, endDate, options = {}) {
+    const {
+      upThreshold = 1.0,      // Target = 1 if return >= +1%
+      downThreshold = -0.5,   // Target = 0 if return <= -0.5%
+      includeNeutral = false  // Whether to include neutral (between thresholds)
+    } = options;
+
     const indicators = this.calculateIndicatorsForRegression(prices);
     const dataset = [];
 
-    for (let i = 1; i < prices.length; i++) {
+    for (let i = 2; i < prices.length; i++) { // Start from 2 to have previous day delta
       const currentDate = new Date(prices[i].date);
       const prevDate = new Date(prices[i - 1].date);
       
@@ -512,30 +519,90 @@ class IndicatorService {
 
       const prevClose = prices[i - 1].close;
       const currentClose = prices[i].close;
-      
-      // Target: 1 if price went up, 0 if down
-      const target = currentClose > prevClose ? 1 : 0;
       const priceChange = currentClose - prevClose;
       const priceChangePercent = ((currentClose - prevClose) / prevClose) * 100;
 
+      // NEW TARGET LOGIC: Based on return thresholds
+      let target;
+      let targetLabel;
+      if (priceChangePercent >= upThreshold) {
+        target = 1;
+        targetLabel = 'UP';
+      } else if (priceChangePercent <= downThreshold) {
+        target = 0;
+        targetLabel = 'DOWN';
+      } else {
+        target = -1; // Neutral
+        targetLabel = 'NEUTRAL';
+        if (!includeNeutral) continue; // Skip neutral if not included
+      }
+
       // Get indicators from previous day (H-1)
       const prevIdx = i - 1;
+      const prevPrevIdx = i - 2; // For delta calculations
       
       // Skip if indicators are not available
       if (indicators.rsi[prevIdx] === null || indicators.macd[prevIdx] === null) continue;
+
+      // === ML-FRIENDLY FEATURES ===
+      const prevHigh = prices[i - 1].high;
+      const prevLow = prices[i - 1].low;
+      const prevOpen = prices[i - 1].open;
+      const prevRange = prevHigh - prevLow;
+      
+      // Close Position: where close is within the day's range (0-1)
+      const closePosition = prevRange > 0 ? (prevClose - prevLow) / prevRange : 0.5;
+      
+      // Body/Range Ratio: candle body size relative to total range
+      const bodySize = Math.abs(prevClose - prevOpen);
+      const bodyRangeRatio = prevRange > 0 ? bodySize / prevRange : 0;
+      
+      // Delta indicators (change from previous day)
+      const deltaRSI = (indicators.rsi[prevIdx] !== null && indicators.rsi[prevPrevIdx] !== null)
+        ? indicators.rsi[prevIdx] - indicators.rsi[prevPrevIdx] : null;
+      
+      const deltaMACDHist = (indicators.macd[prevIdx]?.histogram !== undefined && indicators.macd[prevPrevIdx]?.histogram !== undefined)
+        ? indicators.macd[prevIdx].histogram - indicators.macd[prevPrevIdx].histogram : null;
+      
+      const deltaStochK = (indicators.stoch[prevIdx]?.k !== undefined && indicators.stoch[prevPrevIdx]?.k !== undefined)
+        ? indicators.stoch[prevIdx].k - indicators.stoch[prevPrevIdx].k : null;
+      
+      const deltaADX = (indicators.adx[prevIdx]?.adx !== undefined && indicators.adx[prevPrevIdx]?.adx !== undefined)
+        ? indicators.adx[prevIdx].adx - indicators.adx[prevPrevIdx].adx : null;
+      
+      const deltaCCI = (indicators.cci[prevIdx] !== null && indicators.cci[prevPrevIdx] !== null)
+        ? indicators.cci[prevIdx] - indicators.cci[prevPrevIdx] : null;
+      
+      const deltaMFI = (indicators.mfi[prevIdx] !== null && indicators.mfi[prevPrevIdx] !== null)
+        ? indicators.mfi[prevIdx] - indicators.mfi[prevPrevIdx] : null;
 
       const row = {
         date: prices[i].date,
         prevDate: prices[i - 1].date,
         target,
+        targetLabel,
         priceChange: parseFloat(priceChange.toFixed(2)),
         priceChangePercent: parseFloat(priceChangePercent.toFixed(4)),
         prevClose: parseFloat(prevClose.toFixed(2)),
         currentClose: parseFloat(currentClose.toFixed(2)),
-        prevOpen: parseFloat(prices[i - 1].open?.toFixed(2) || 0),
-        prevHigh: parseFloat(prices[i - 1].high?.toFixed(2) || 0),
-        prevLow: parseFloat(prices[i - 1].low?.toFixed(2) || 0),
+        prevOpen: parseFloat(prevOpen?.toFixed(2) || 0),
+        prevHigh: parseFloat(prevHigh?.toFixed(2) || 0),
+        prevLow: parseFloat(prevLow?.toFixed(2) || 0),
         prevVolume: prices[i - 1].volume || 0,
+        
+        // === NEW ML-FRIENDLY FEATURES ===
+        closePosition: parseFloat(closePosition.toFixed(4)),        // Where close is in day's range (0-1)
+        bodyRangeRatio: parseFloat(bodyRangeRatio.toFixed(4)),      // Body / Range ratio
+        upperWickRatio: prevRange > 0 ? parseFloat(((prevHigh - Math.max(prevOpen, prevClose)) / prevRange).toFixed(4)) : 0,
+        lowerWickRatio: prevRange > 0 ? parseFloat(((Math.min(prevOpen, prevClose) - prevLow) / prevRange).toFixed(4)) : 0,
+        
+        // Delta indicators (change from previous day) - MORE PREDICTIVE
+        deltaRSI: deltaRSI !== null ? parseFloat(deltaRSI.toFixed(2)) : null,
+        deltaMACDHist: deltaMACDHist !== null ? parseFloat(deltaMACDHist.toFixed(4)) : null,
+        deltaStochK: deltaStochK !== null ? parseFloat(deltaStochK.toFixed(2)) : null,
+        deltaADX: deltaADX !== null ? parseFloat(deltaADX.toFixed(2)) : null,
+        deltaCCI: deltaCCI !== null ? parseFloat(deltaCCI.toFixed(2)) : null,
+        deltaMFI: deltaMFI !== null ? parseFloat(deltaMFI.toFixed(2)) : null,
         
         // SMA indicators (H-1)
         sma5: indicators.sma5[prevIdx] ? parseFloat(indicators.sma5[prevIdx].toFixed(2)) : null,
@@ -556,6 +623,11 @@ class IndicatorService {
         priceAboveSMA50: prevClose > (indicators.sma50[prevIdx] || 0) ? 1 : 0,
         priceAboveEMA12: prevClose > (indicators.ema12[prevIdx] || 0) ? 1 : 0,
         priceAboveEMA26: prevClose > (indicators.ema26[prevIdx] || 0) ? 1 : 0,
+        
+        // Distance from MA (normalized) - MORE USEFUL FOR ML
+        distFromSMA5: indicators.sma5[prevIdx] ? parseFloat(((prevClose - indicators.sma5[prevIdx]) / indicators.sma5[prevIdx] * 100).toFixed(4)) : null,
+        distFromSMA20: indicators.sma20[prevIdx] ? parseFloat(((prevClose - indicators.sma20[prevIdx]) / indicators.sma20[prevIdx] * 100).toFixed(4)) : null,
+        distFromSMA50: indicators.sma50[prevIdx] ? parseFloat(((prevClose - indicators.sma50[prevIdx]) / indicators.sma50[prevIdx] * 100).toFixed(4)) : null,
         
         // SMA crossover signals
         sma5AboveSMA10: (indicators.sma5[prevIdx] || 0) > (indicators.sma10[prevIdx] || 0) ? 1 : 0,

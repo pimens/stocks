@@ -168,7 +168,14 @@ router.get('/broker/:symbol', async (req, res) => {
 // Get historical data with indicators for regression analysis
 router.post('/regression-data', async (req, res) => {
   try {
-    const { symbols, startDate, endDate } = req.body;
+    const { 
+      symbols, 
+      startDate, 
+      endDate,
+      upThreshold = 1.0,      // Default: +1% for UP
+      downThreshold = -0.5,   // Default: -0.5% for DOWN
+      includeNeutral = false  // Whether to include neutral data points
+    } = req.body;
     
     if (!symbols || !Array.isArray(symbols) || symbols.length === 0) {
       return res.status(400).json({ error: 'Please provide an array of stock symbols' });
@@ -180,6 +187,12 @@ router.post('/regression-data', async (req, res) => {
 
     const allData = [];
     const errors = [];
+
+    const options = {
+      upThreshold: parseFloat(upThreshold),
+      downThreshold: parseFloat(downThreshold),
+      includeNeutral: Boolean(includeNeutral)
+    };
 
     for (const symbol of symbols) {
       try {
@@ -194,7 +207,8 @@ router.post('/regression-data', async (req, res) => {
         const dataset = indicatorService.generateRegressionDataset(
           stockData.prices,
           startDate,
-          endDate
+          endDate,
+          options
         );
 
         // Add symbol to each row
@@ -217,6 +231,11 @@ router.post('/regression-data', async (req, res) => {
     });
 
     // Calculate summary statistics
+    const upCount = allData.filter(d => d.target === 1).length;
+    const downCount = allData.filter(d => d.target === 0).length;
+    const neutralCount = allData.filter(d => d.target === -1).length;
+    const totalNonNeutral = upCount + downCount;
+
     const summary = {
       totalRecords: allData.length,
       symbolsProcessed: [...new Set(allData.map(d => d.symbol))].length,
@@ -224,10 +243,17 @@ router.post('/regression-data', async (req, res) => {
         start: startDate,
         end: endDate
       },
+      thresholds: {
+        upThreshold: options.upThreshold,
+        downThreshold: options.downThreshold,
+        includeNeutral: options.includeNeutral
+      },
       targetDistribution: {
-        up: allData.filter(d => d.target === 1).length,
-        down: allData.filter(d => d.target === 0).length,
-        upPercent: allData.length > 0 ? (allData.filter(d => d.target === 1).length / allData.length * 100).toFixed(2) : 0
+        up: upCount,
+        down: downCount,
+        neutral: neutralCount,
+        upPercent: totalNonNeutral > 0 ? (upCount / totalNonNeutral * 100).toFixed(2) : 0,
+        downPercent: totalNonNeutral > 0 ? (downCount / totalNonNeutral * 100).toFixed(2) : 0
       },
       errors: errors.length > 0 ? errors : undefined
     };
