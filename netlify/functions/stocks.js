@@ -130,6 +130,97 @@ exports.handler = async (event, context) => {
       return { statusCode: 200, headers, body: JSON.stringify(brokerSummary) };
     }
 
+    // POST /api/stocks/regression-data
+    if (action === 'regression-data' && event.httpMethod === 'POST') {
+      const { 
+        symbols, 
+        startDate, 
+        endDate,
+        upThreshold = 1.0,
+        downThreshold = -0.5,
+        includeNeutral = false
+      } = JSON.parse(event.body || '{}');
+      
+      if (!symbols || !Array.isArray(symbols) || symbols.length === 0) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Please provide an array of stock symbols' }) };
+      }
+      
+      if (!startDate || !endDate) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Please provide startDate and endDate' }) };
+      }
+
+      const allData = [];
+      const errors = [];
+      const options = {
+        upThreshold: parseFloat(upThreshold),
+        downThreshold: parseFloat(downThreshold),
+        includeNeutral: Boolean(includeNeutral)
+      };
+
+      for (const symbol of symbols) {
+        try {
+          const stockData = await stockService.getStockData(symbol, '1y', '1d');
+          
+          if (!stockData.prices || stockData.prices.length < 60) {
+            errors.push({ symbol, error: 'Not enough historical data' });
+            continue;
+          }
+
+          const dataset = indicatorService.generateRegressionDataset(
+            stockData.prices,
+            startDate,
+            endDate,
+            options
+          );
+
+          const dataWithSymbol = dataset.map(row => ({
+            symbol: symbol.toUpperCase(),
+            ...row
+          }));
+
+          allData.push(...dataWithSymbol);
+        } catch (err) {
+          console.error(`Error processing ${symbol}:`, err.message);
+          errors.push({ symbol, error: err.message });
+        }
+      }
+
+      allData.sort((a, b) => {
+        if (a.symbol !== b.symbol) return a.symbol.localeCompare(b.symbol);
+        return new Date(a.date) - new Date(b.date);
+      });
+
+      const upCount = allData.filter(d => d.target === 1).length;
+      const downCount = allData.filter(d => d.target === 0).length;
+      const neutralCount = allData.filter(d => d.target === -1).length;
+      const totalNonNeutral = upCount + downCount;
+
+      const summary = {
+        totalRecords: allData.length,
+        symbolsProcessed: [...new Set(allData.map(d => d.symbol))].length,
+        dateRange: { start: startDate, end: endDate },
+        thresholds: options,
+        targetDistribution: {
+          up: upCount,
+          down: downCount,
+          neutral: neutralCount,
+          upPercent: totalNonNeutral > 0 ? (upCount / totalNonNeutral * 100).toFixed(2) : 0,
+          downPercent: totalNonNeutral > 0 ? (downCount / totalNonNeutral * 100).toFixed(2) : 0
+        },
+        errors: errors.length > 0 ? errors : undefined
+      };
+
+      return { 
+        statusCode: 200, 
+        headers, 
+        body: JSON.stringify({
+          summary,
+          data: allData,
+          columns: allData.length > 0 ? Object.keys(allData[0]) : []
+        })
+      };
+    }
+
     return { statusCode: 404, headers, body: JSON.stringify({ error: 'Endpoint not found' }) };
   } catch (error) {
     console.error('Stock API Error:', error);
