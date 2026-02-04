@@ -22,6 +22,9 @@ export default function MLPrediction({ regressionData, selectedColumns }) {
   const [compareMode, setCompareMode] = useState(false)
   const [modelsToCompare, setModelsToCompare] = useState(new Set())
   
+  // Model deletion selection
+  const [selectedModelsToDelete, setSelectedModelsToDelete] = useState(new Set())
+  
   // Results
   const [trainingResult, setTrainingResult] = useState(null)
   const [comparisonResult, setComparisonResult] = useState(null)
@@ -284,6 +287,57 @@ export default function MLPrediction({ regressionData, selectedColumns }) {
       }
     } catch (err) {
       setError(err.message)
+    }
+  }
+  
+  // Toggle model selection for deletion
+  const toggleModelToDelete = (modelId) => {
+    setSelectedModelsToDelete(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(modelId)) {
+        newSet.delete(modelId)
+      } else {
+        newSet.add(modelId)
+      }
+      return newSet
+    })
+  }
+  
+  // Select all models for deletion
+  const selectAllModelsToDelete = () => {
+    setSelectedModelsToDelete(new Set(trainedModels.map(m => m.id)))
+  }
+  
+  // Deselect all models
+  const deselectAllModelsToDelete = () => {
+    setSelectedModelsToDelete(new Set())
+  }
+  
+  // Delete selected models
+  const handleDeleteSelectedModels = async () => {
+    if (selectedModelsToDelete.size === 0) return
+    
+    const count = selectedModelsToDelete.size
+    if (!confirm(`Apakah Anda yakin ingin menghapus ${count} model yang dipilih?`)) return
+    
+    setLoading(true)
+    try {
+      const deletePromises = Array.from(selectedModelsToDelete).map(modelId =>
+        fetch(`${ML_API_BASE}/models/${modelId}`, { method: 'DELETE' })
+      )
+      
+      await Promise.all(deletePromises)
+      setSelectedModelsToDelete(new Set())
+      fetchTrainedModels()
+      
+      // Clear training result if deleted
+      if (trainingResult && selectedModelsToDelete.has(trainingResult.model_id)) {
+        setTrainingResult(null)
+      }
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
     }
   }
   
@@ -834,24 +888,69 @@ export default function MLPrediction({ regressionData, selectedColumns }) {
       {activeTab === 'predict' && (
         <div className="space-y-6">
           <div className="bg-gray-700/30 rounded-lg p-4">
-            <h3 className="text-lg font-semibold text-white mb-4">🔮 Trained Models</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">🔮 Trained Models</h3>
+              {trainedModels.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-400">
+                    {selectedModelsToDelete.size} dipilih
+                  </span>
+                  <button
+                    onClick={selectAllModelsToDelete}
+                    className="px-3 py-1 bg-blue-600/30 text-blue-400 rounded text-sm hover:bg-blue-600/50"
+                  >
+                    Pilih Semua
+                  </button>
+                  <button
+                    onClick={deselectAllModelsToDelete}
+                    className="px-3 py-1 bg-gray-600/30 text-gray-400 rounded text-sm hover:bg-gray-600/50"
+                  >
+                    Batal Pilih
+                  </button>
+                  {selectedModelsToDelete.size > 0 && (
+                    <button
+                      onClick={handleDeleteSelectedModels}
+                      disabled={loading}
+                      className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm flex items-center gap-1"
+                    >
+                      {loading ? 'Menghapus...' : `🗑️ Hapus (${selectedModelsToDelete.size})`}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
             {trainedModels.length === 0 ? (
               <p className="text-gray-400">Belum ada model yang di-training. Silakan training model terlebih dahulu.</p>
             ) : (
               <div className="space-y-3">
                 {trainedModels.map(model => (
-                  <div key={model.id} className="bg-gray-800/50 rounded-lg p-4">
+                  <div 
+                    key={model.id} 
+                    className={`bg-gray-800/50 rounded-lg p-4 border-2 transition ${
+                      selectedModelsToDelete.has(model.id) 
+                        ? 'border-red-500/50' 
+                        : 'border-transparent'
+                    }`}
+                  >
                     <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-white font-medium">{model.model_name}</p>
-                        <p className="text-sm text-gray-400">
-                          Accuracy: <span className={getAccuracyColor(model.metrics.accuracy)}>
-                            {formatPercent(model.metrics.accuracy)}
-                          </span>
-                          {' | '}Features: {model.features.length}
-                          {' | '}Target: {model.target}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">{model.trained_at}</p>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedModelsToDelete.has(model.id)}
+                          onChange={() => toggleModelToDelete(model.id)}
+                          className="w-5 h-5 rounded bg-gray-700 border-gray-600 text-red-500 focus:ring-red-500 cursor-pointer"
+                        />
+                        <div>
+                          <p className="text-white font-medium">{model.model_name}</p>
+                          <p className="text-sm text-gray-400">
+                            Accuracy: <span className={getAccuracyColor(model.metrics.accuracy)}>
+                              {formatPercent(model.metrics.accuracy)}
+                            </span>
+                            {' | '}Features: {model.features.length}
+                            {' | '}Target: {model.target}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">{model.trained_at}</p>
+                        </div>
                       </div>
                       <div className="flex gap-2">
                         <button
