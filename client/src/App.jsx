@@ -11,6 +11,7 @@ import RegressionData from './components/RegressionData'
 import LiveIndicatorView from './components/LiveIndicatorView'
 import IntradayIndicatorView from './components/IntradayIndicatorView'
 import FeatureSelection from './components/FeatureSelection'
+import ModelManager from './components/ModelManager'
 
 function App() {
   const [selectedStocks, setSelectedStocks] = useState([])
@@ -94,6 +95,10 @@ function App() {
 
         {activeTab === 'feature-selection' && (
           <FeatureSelection />
+        )}
+
+        {activeTab === 'model-manager' && (
+          <ModelManager />
         )}
       </main>
       
