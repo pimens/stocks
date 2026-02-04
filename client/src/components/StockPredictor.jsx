@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { stockApi } from '../services/api'
 
 const ML_API_BASE = import.meta.env.VITE_ML_API_BASE || 'http://localhost:8000'
@@ -7,6 +7,32 @@ const POPULAR_STOCKS = [
   'BBCA', 'BBRI', 'BMRI', 'BBNI', 'TLKM', 'ASII', 'UNVR', 'HMSP', 'GGRM', 'ICBP',
   'INDF', 'KLBF', 'PGAS', 'SMGR', 'UNTR', 'WIKA', 'PTBA', 'ANTM', 'INCO', 'EXCL'
 ]
+
+// Group features by category for better display
+const FEATURE_GROUPS = {
+  'Moving Averages': ['sma5', 'sma10', 'sma20', 'sma50', 'ema5', 'ema10', 'ema12', 'ema26'],
+  'Price vs MA': ['priceAboveSMA5', 'priceAboveSMA10', 'priceAboveSMA20', 'priceAboveSMA50', 'priceAboveEMA12', 'priceAboveEMA26'],
+  'Distance from MA': ['distFromSMA5', 'distFromSMA20', 'distFromSMA50'],
+  'MA Crossovers': ['sma5AboveSMA10', 'sma10AboveSMA20', 'sma20AboveSMA50'],
+  'RSI': ['rsi', 'rsiOversold', 'rsiOverbought', 'rsiNeutral', 'deltaRSI'],
+  'MACD': ['macd', 'macdSignal', 'macdHistogram', 'macdBullish', 'macdPositive', 'deltaMACDHist'],
+  'Bollinger Bands': ['bbUpper', 'bbMiddle', 'bbLower', 'bbWidth', 'priceBelowLowerBB', 'priceAboveUpperBB'],
+  'Stochastic': ['stochK', 'stochD', 'stochOversold', 'stochOverbought', 'stochBullishCross', 'deltaStochK'],
+  'ADX/DMI': ['adx', 'pdi', 'mdi', 'strongTrend', 'bullishDI', 'deltaADX'],
+  'ATR': ['atr', 'atrPercent'],
+  'OBV': ['obv', 'obvChange', 'obvTrend'],
+  'Williams %R': ['williamsR', 'williamsROversold', 'williamsROverbought'],
+  'CCI': ['cci', 'cciOversold', 'cciOverbought', 'deltaCCI'],
+  'MFI': ['mfi', 'mfiOversold', 'mfiOverbought', 'deltaMFI'],
+  'ROC': ['roc', 'rocPositive'],
+  'Momentum': ['momentum', 'momentumPositive'],
+  'Price Position': ['pricePosition', 'closePosition', 'bodyRangeRatio', 'upperWickRatio', 'lowerWickRatio'],
+  'Volume': ['volumeRatio', 'highVolume', 'prevVolume'],
+  'Candlestick': ['bodySize', 'upperWick', 'lowerWick', 'isBullishCandle', 'isDoji'],
+  'Gaps': ['gapUp', 'gapDown'],
+  'Returns': ['return1d', 'return3d', 'return5d'],
+  'Price Data': ['prevClose', 'prevOpen', 'prevHigh', 'prevLow']
+}
 
 export default function StockPredictor({ trainedModels = [] }) {
   const [symbol, setSymbol] = useState('')
@@ -17,6 +43,17 @@ export default function StockPredictor({ trainedModels = [] }) {
   const [loading, setLoading] = useState(false)
   const [predicting, setPredicting] = useState(false)
   const [error, setError] = useState(null)
+  const [showAllFeatures, setShowAllFeatures] = useState(false)
+  
+  // Get selected model info
+  const selectedModel = useMemo(() => {
+    return trainedModels.find(m => m.id === selectedModelId)
+  }, [trainedModels, selectedModelId])
+  
+  // Get model features (features used for prediction)
+  const modelFeatures = useMemo(() => {
+    return selectedModel?.features || []
+  }, [selectedModel])
   
   // Set default date to today
   useEffect(() => {
@@ -66,8 +103,7 @@ export default function StockPredictor({ trainedModels = [] }) {
       return
     }
     
-    const model = trainedModels.find(m => m.id === selectedModelId)
-    if (!model) {
+    if (!selectedModel) {
       setError('Model tidak ditemukan')
       return
     }
@@ -82,7 +118,7 @@ export default function StockPredictor({ trainedModels = [] }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           data: [indicatorData.data],
-          features: model.features,
+          features: selectedModel.features,
           model_id: selectedModelId
         })
       })
@@ -95,7 +131,7 @@ export default function StockPredictor({ trainedModels = [] }) {
       
       setPrediction({
         ...result,
-        model: model,
+        model: selectedModel,
         predictedValue: result.predictions[0],
         probabilities: result.probabilities ? result.probabilities[0] : null
       })
@@ -115,6 +151,43 @@ export default function StockPredictor({ trainedModels = [] }) {
       month: 'long', 
       day: 'numeric' 
     })
+  }
+  
+  const formatFeatureValue = (value) => {
+    if (value === null || value === undefined) return '-'
+    if (typeof value === 'number') {
+      if (Number.isInteger(value) || Math.abs(value) > 1000) return value.toLocaleString()
+      return value.toFixed(4)
+    }
+    return String(value)
+  }
+  
+  const getGroupIcon = (groupName) => {
+    const icons = {
+      'Moving Averages': '📈',
+      'Price vs MA': '⚖️',
+      'Distance from MA': '📏',
+      'MA Crossovers': '✂️',
+      'RSI': '💪',
+      'MACD': '📊',
+      'Bollinger Bands': '📉',
+      'Stochastic': '🔄',
+      'ADX/DMI': '🎯',
+      'ATR': '📐',
+      'OBV': '📦',
+      'Williams %R': '🔻',
+      'CCI': '🌡️',
+      'MFI': '💰',
+      'ROC': '🚀',
+      'Momentum': '⚡',
+      'Price Position': '📍',
+      'Volume': '📊',
+      'Candlestick': '🕯️',
+      'Gaps': '🔲',
+      'Returns': '💹',
+      'Price Data': '💵'
+    }
+    return icons[groupName] || '📋'
   }
   
   const getPredictionLabel = (value) => {
@@ -332,24 +405,100 @@ export default function StockPredictor({ trainedModels = [] }) {
             </div>
           )}
           
-          {/* Key Indicators */}
-          <div className="bg-gray-700/30 border border-gray-600 rounded-lg p-4">
-            <h4 className="text-white font-semibold mb-3">📊 Indikator Teknikal (H-1)</h4>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-              <IndicatorCard label="RSI" value={indicatorData.data.rsi} suffix="" />
-              <IndicatorCard label="MACD" value={indicatorData.data.macd} suffix="" decimals={4} />
-              <IndicatorCard label="MACD Hist" value={indicatorData.data.macdHistogram} suffix="" decimals={4} />
-              <IndicatorCard label="Stoch %K" value={indicatorData.data.stochK} suffix="" />
-              <IndicatorCard label="ADX" value={indicatorData.data.adx} suffix="" />
-              <IndicatorCard label="ATR %" value={indicatorData.data.atrPercent} suffix="%" />
-              <IndicatorCard label="BB Width" value={indicatorData.data.bbWidth} suffix="%" />
-              <IndicatorCard label="MFI" value={indicatorData.data.mfi} suffix="" />
-              <IndicatorCard label="CCI" value={indicatorData.data.cci} suffix="" />
-              <IndicatorCard label="Williams %R" value={indicatorData.data.williamsR} suffix="" />
-              <IndicatorCard label="ROC" value={indicatorData.data.roc} suffix="%" decimals={2} />
-              <IndicatorCard label="Vol Ratio" value={indicatorData.data.volumeRatio} suffix="x" />
+          {/* Model Features - Features yang akan digunakan untuk prediksi */}
+          {selectedModel && (
+            <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-purple-400 font-semibold">🎯 Fitur Model ({modelFeatures.length} fitur)</h4>
+                <span className="text-xs text-gray-500">Model: {selectedModel.model_name}</span>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                {modelFeatures.map(feature => (
+                  <div key={feature} className="bg-purple-800/30 rounded px-2 py-1.5 border border-purple-600/30">
+                    <p className="text-purple-300 text-xs truncate">{feature}</p>
+                    <p className="text-white font-medium text-sm">
+                      {formatFeatureValue(indicatorData.data[feature])}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
+          )}
+          
+          {/* Toggle All Features */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowAllFeatures(!showAllFeatures)}
+              className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition"
+            >
+              <span>{showAllFeatures ? '▼' : '▶'}</span>
+              <span>{showAllFeatures ? 'Sembunyikan' : 'Tampilkan'} Semua Indikator ({Object.keys(indicatorData.data).length - 5} data)</span>
+            </button>
           </div>
+          
+          {/* All Features - Grouped */}
+          {showAllFeatures && (
+            <div className="space-y-4">
+              {Object.entries(FEATURE_GROUPS).map(([groupName, features]) => {
+                const availableFeatures = features.filter(f => indicatorData.data[f] !== undefined)
+                if (availableFeatures.length === 0) return null
+                
+                return (
+                  <div key={groupName} className="bg-gray-700/30 border border-gray-600 rounded-lg p-4">
+                    <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                      <span>{getGroupIcon(groupName)}</span>
+                      {groupName}
+                      <span className="text-xs text-gray-500 font-normal">({availableFeatures.length})</span>
+                    </h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                      {availableFeatures.map(feature => {
+                        const isUsedByModel = modelFeatures.includes(feature)
+                        return (
+                          <div 
+                            key={feature} 
+                            className={`rounded px-2 py-1.5 ${
+                              isUsedByModel 
+                                ? 'bg-purple-800/30 border border-purple-600/50' 
+                                : 'bg-gray-800/50'
+                            }`}
+                          >
+                            <p className={`text-xs truncate ${isUsedByModel ? 'text-purple-300' : 'text-gray-400'}`}>
+                              {feature} {isUsedByModel && '⭐'}
+                            </p>
+                            <p className="text-white font-medium text-sm">
+                              {formatFeatureValue(indicatorData.data[feature])}
+                            </p>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+          
+          {/* Quick Indicators Summary */}
+          {!showAllFeatures && (
+            <div className="bg-gray-700/30 border border-gray-600 rounded-lg p-4">
+              <h4 className="text-white font-semibold mb-3">📊 Ringkasan Indikator Teknikal (H-1)</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                <IndicatorCard label="RSI" value={indicatorData.data.rsi} suffix="" highlight={modelFeatures.includes('rsi')} />
+                <IndicatorCard label="MACD" value={indicatorData.data.macd} suffix="" decimals={4} highlight={modelFeatures.includes('macd')} />
+                <IndicatorCard label="MACD Hist" value={indicatorData.data.macdHistogram} suffix="" decimals={4} highlight={modelFeatures.includes('macdHistogram')} />
+                <IndicatorCard label="Stoch %K" value={indicatorData.data.stochK} suffix="" highlight={modelFeatures.includes('stochK')} />
+                <IndicatorCard label="ADX" value={indicatorData.data.adx} suffix="" highlight={modelFeatures.includes('adx')} />
+                <IndicatorCard label="ATR %" value={indicatorData.data.atrPercent} suffix="%" highlight={modelFeatures.includes('atrPercent')} />
+                <IndicatorCard label="BB Width" value={indicatorData.data.bbWidth} suffix="%" highlight={modelFeatures.includes('bbWidth')} />
+                <IndicatorCard label="MFI" value={indicatorData.data.mfi} suffix="" highlight={modelFeatures.includes('mfi')} />
+                <IndicatorCard label="CCI" value={indicatorData.data.cci} suffix="" highlight={modelFeatures.includes('cci')} />
+                <IndicatorCard label="Williams %R" value={indicatorData.data.williamsR} suffix="" highlight={modelFeatures.includes('williamsR')} />
+                <IndicatorCard label="ROC" value={indicatorData.data.roc} suffix="%" decimals={2} highlight={modelFeatures.includes('roc')} />
+                <IndicatorCard label="Vol Ratio" value={indicatorData.data.volumeRatio} suffix="x" highlight={modelFeatures.includes('volumeRatio')} />
+              </div>
+              <p className="text-xs text-gray-500 mt-3">💡 Fitur yang di-highlight (purple border) adalah fitur yang digunakan oleh model</p>
+            </div>
+          )}
           
           {/* Prediction Result */}
           {prediction && (
@@ -447,14 +596,20 @@ export default function StockPredictor({ trainedModels = [] }) {
 }
 
 // Helper component for indicator cards
-function IndicatorCard({ label, value, suffix = '', decimals = 2 }) {
+function IndicatorCard({ label, value, suffix = '', decimals = 2, highlight = false }) {
   const displayValue = value !== null && value !== undefined 
     ? (typeof value === 'number' ? value.toFixed(decimals) : value)
     : '-'
   
   return (
-    <div className="bg-gray-800/50 rounded p-2">
-      <p className="text-gray-400 text-xs">{label}</p>
+    <div className={`rounded p-2 ${
+      highlight 
+        ? 'bg-purple-800/30 border border-purple-600/50' 
+        : 'bg-gray-800/50'
+    }`}>
+      <p className={`text-xs ${highlight ? 'text-purple-300' : 'text-gray-400'}`}>
+        {label} {highlight && '⭐'}
+      </p>
       <p className="text-white font-medium">{displayValue}{suffix}</p>
     </div>
   )

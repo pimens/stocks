@@ -204,6 +204,7 @@ class TrainRequest(BaseModel):
     cross_validation: bool = True
     cv_folds: int = 5
     custom_params: Optional[Dict[str, Any]] = None
+    model_name: Optional[str] = None  # Custom name for the model
 
 
 class PredictRequest(BaseModel):
@@ -378,6 +379,9 @@ def train_model(request: TrainRequest):
         # Generate model ID
         model_id = f"{request.model_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         
+        # Use custom name if provided, otherwise use default model name
+        display_name = request.model_name if request.model_name else model_config["name"]
+        
         # Store model
         trained_models[model_id] = {
             "model": model,
@@ -385,7 +389,7 @@ def train_model(request: TrainRequest):
             "imputer": imputer,
             "label_encoder": label_encoder,
             "model_type": request.model_type,
-            "model_name": model_config["name"],
+            "model_name": display_name,
             "features": request.features,
             "target": request.target,
             "original_classes": original_classes,
@@ -400,7 +404,7 @@ def train_model(request: TrainRequest):
         model_history.append({
             "model_id": model_id,
             "model_type": request.model_type,
-            "model_name": model_config["name"],
+            "model_name": display_name,
             "accuracy": metrics["accuracy"],
             "trained_at": datetime.now().isoformat()
         })
@@ -408,7 +412,8 @@ def train_model(request: TrainRequest):
         return {
             "success": True,
             "model_id": model_id,
-            "model_name": model_config["name"],
+            "model_name": display_name,
+            "model_type_name": model_config["name"],
             "metrics": metrics,
             "feature_importance": feature_importance,
             "data_info": {

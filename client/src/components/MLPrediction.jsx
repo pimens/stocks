@@ -16,6 +16,7 @@ export default function MLPrediction({ regressionData, selectedColumns }) {
   const [testSize, setTestSize] = useState(0.2)
   const [enableCV, setEnableCV] = useState(true)
   const [cvFolds, setCvFolds] = useState(5)
+  const [modelName, setModelName] = useState('')  // Custom model name
   
   // Comparison mode
   const [compareMode, setCompareMode] = useState(false)
@@ -156,7 +157,8 @@ export default function MLPrediction({ regressionData, selectedColumns }) {
           model_type: selectedModel,
           test_size: testSize,
           cross_validation: enableCV,
-          cv_folds: cvFolds
+          cv_folds: cvFolds,
+          model_name: modelName.trim() || null  // Send custom name if provided
         })
       })
       
@@ -167,6 +169,7 @@ export default function MLPrediction({ regressionData, selectedColumns }) {
       }
       
       setTrainingResult(result)
+      setModelName('')  // Clear model name after successful training
       fetchTrainedModels()
     } catch (err) {
       setError(err.message)
@@ -519,6 +522,19 @@ export default function MLPrediction({ regressionData, selectedColumns }) {
           <div className="bg-gray-700/30 rounded-lg p-4">
             <h3 className="text-lg font-semibold text-white mb-4">⚙️ Parameter Training</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-sm text-gray-400 mb-1">
+                  Nama Model <span className="text-gray-500">(opsional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={modelName}
+                  onChange={(e) => setModelName(e.target.value)}
+                  placeholder="Contoh: RF Model RSI-MACD v1"
+                  className="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white placeholder-gray-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">Biarkan kosong untuk menggunakan nama default</p>
+              </div>
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Test Size</label>
                 <input
