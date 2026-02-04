@@ -9,6 +9,7 @@ import StockDetail from './components/StockDetail'
 import AIAnalysis from './components/AIAnalysis'
 import RegressionData from './components/RegressionData'
 import LiveIndicatorView from './components/LiveIndicatorView'
+import IntradayIndicatorView from './components/IntradayIndicatorView'
 
 function App() {
   const [selectedStocks, setSelectedStocks] = useState([])
@@ -84,6 +85,10 @@ function App() {
 
         {activeTab === 'live' && (
           <LiveIndicatorView />
+        )}
+
+        {activeTab === 'intraday' && (
+          <IntradayIndicatorView />
         )}
       </main>
       

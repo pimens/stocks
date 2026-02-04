@@ -1,4 +1,4 @@
-import { FiTrendingUp, FiBarChart2, FiCpu, FiDatabase, FiActivity } from 'react-icons/fi'
+import { FiTrendingUp, FiBarChart2, FiCpu, FiDatabase, FiActivity, FiZap } from 'react-icons/fi'
 
 function Header({ activeTab, setActiveTab }) {
   const tabs = [
@@ -7,6 +7,7 @@ function Header({ activeTab, setActiveTab }) {
     { id: 'ai', label: 'AI Analysis', icon: FiCpu },
     { id: 'regression', label: 'ML Training', icon: FiDatabase },
     { id: 'live', label: 'Live Predict', icon: FiActivity },
+    { id: 'intraday', label: 'Realtime', icon: FiZap },
   ]
 
   return (

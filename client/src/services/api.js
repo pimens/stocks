@@ -79,6 +79,14 @@ export const stockApi = {
       useRealtime
     })
     return response.data
+  },
+
+  // Get intraday indicators (real-time during market hours)
+  getIntradayIndicators: async (symbol) => {
+    const response = await axios.post(`${API_BASE}/stocks/intraday-indicators`, {
+      symbol
+    })
+    return response.data
   }
 }
 

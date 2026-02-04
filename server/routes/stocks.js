@@ -313,6 +313,124 @@ router.post('/predict-data', async (req, res) => {
   }
 });
 
+// POST /api/stocks/intraday-indicators - Get realtime intraday indicators (market sedang berjalan)
+router.post('/intraday-indicators', async (req, res) => {
+  try {
+    const { symbol } = req.body;
+    
+    if (!symbol) {
+      return res.status(400).json({ error: 'Please provide a stock symbol' });
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    
+    // Get historical daily data
+    const stockData = await stockService.getStockData(symbol, '1y', '1d');
+    
+    if (!stockData.prices || stockData.prices.length < 60) {
+      return res.status(400).json({ error: 'Not enough historical data for this stock' });
+    }
+
+    let prices = [...stockData.prices];
+    let intradayInfo = {
+      isMarketOpen: false,
+      lastUpdate: now.toISOString(),
+      todayData: null
+    };
+
+    // Try to get current realtime data
+    try {
+      const quotes = await stockService.getQuote([symbol]);
+      if (quotes && quotes.length > 0) {
+        const currentQuote = quotes[0];
+        
+        // Determine market status from quote
+        const marketState = currentQuote.marketState || 'CLOSED';
+        intradayInfo.isMarketOpen = ['REGULAR', 'PRE', 'POST'].includes(marketState);
+        intradayInfo.marketState = marketState;
+        
+        // Check if we already have today's data
+        const lastPrice = prices[prices.length - 1];
+        const lastPriceDate = new Date(lastPrice.date).toISOString().split('T')[0];
+        
+        // Build today's candle from realtime data
+        const todayCandle = {
+          date: now.toISOString(),
+          open: currentQuote.regularMarketOpen || currentQuote.regularMarketPrice,
+          high: currentQuote.regularMarketDayHigh || currentQuote.regularMarketPrice,
+          low: currentQuote.regularMarketDayLow || currentQuote.regularMarketPrice,
+          close: currentQuote.regularMarketPrice,
+          volume: currentQuote.regularMarketVolume || 0,
+          prevClose: currentQuote.regularMarketPreviousClose || lastPrice.close
+        };
+        
+        intradayInfo.todayData = {
+          ...todayCandle,
+          change: currentQuote.regularMarketChange,
+          changePercent: currentQuote.regularMarketChangePercent,
+          bid: currentQuote.bid,
+          ask: currentQuote.ask,
+          bidSize: currentQuote.bidSize,
+          askSize: currentQuote.askSize
+        };
+        
+        if (lastPriceDate === today) {
+          // Update today's data with current realtime values
+          prices[prices.length - 1] = {
+            ...lastPrice,
+            date: lastPrice.date,
+            open: lastPrice.open, // Keep the original open
+            high: Math.max(lastPrice.high || 0, todayCandle.high || 0),
+            low: Math.min(lastPrice.low || Infinity, todayCandle.low || Infinity),
+            close: todayCandle.close,
+            volume: todayCandle.volume
+          };
+        } else {
+          // Add today as a new entry
+          prices.push(todayCandle);
+        }
+      }
+    } catch (realtimeErr) {
+      console.warn('Could not fetch realtime data:', realtimeErr.message);
+      intradayInfo.realtimeError = realtimeErr.message;
+    }
+
+    // Calculate indicators using today's partial data as the "current" day
+    // We want indicators calculated up to and including today's partial data
+    const indicatorData = indicatorService.getIntradayIndicators(prices);
+    
+    if (indicatorData.error) {
+      return res.status(400).json({ error: indicatorData.error });
+    }
+    
+    // Add symbol
+    indicatorData.symbol = symbol.toUpperCase();
+
+    // Count features
+    const featureCount = Object.keys(indicatorData).filter(
+      key => !['symbol', 'indicatorDate', 'isIntraday', 'marketStatus'].includes(key)
+    ).length;
+
+    res.json({
+      success: true,
+      data: indicatorData,
+      intraday: intradayInfo,
+      info: {
+        symbol: symbol.toUpperCase(),
+        indicatorDate: indicatorData.indicatorDate,
+        featureCount: featureCount,
+        isIntraday: true,
+        lastUpdate: now.toISOString(),
+        message: `Realtime indicators as of ${now.toLocaleTimeString('id-ID')} WIB - Data masih berjalan, belum final`
+      }
+    });
+  } catch (error) {
+    console.error('Intraday indicators error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // POST /api/stocks/live-indicators - Get live indicator data with realtime support
 router.post('/live-indicators', async (req, res) => {
   try {

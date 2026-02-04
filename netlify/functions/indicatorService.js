@@ -1040,6 +1040,210 @@ class IndicatorService {
 
     return signals;
   }
+
+  // Get intraday indicators - using current day's partial data as latest candle
+  getIntradayIndicators(prices) {
+    if (prices.length < 60) {
+      return { error: 'Not enough historical data' };
+    }
+
+    const indicators = this.calculateIndicatorsForRegression(prices);
+    
+    // Calculate additional indicators not in calculateIndicatorsForRegression
+    const ema9 = this.calculateEMA(prices, 9);
+    const ema21 = this.calculateEMA(prices, 21);
+    const trix = this.calculateTRIX ? this.calculateTRIX(prices) : Array(prices.length).fill(null);
+    const ichimoku = this.calculateIchimoku ? this.calculateIchimoku(prices) : Array(prices.length).fill(null);
+    const psar = this.calculateParabolicSAR ? this.calculateParabolicSAR(prices) : Array(prices.length).fill(null);
+    const supertrend = this.calculateSuperTrend ? this.calculateSuperTrend(prices) : Array(prices.length).fill(null);
+    const vwap = this.calculateVWAP ? this.calculateVWAP(prices) : Array(prices.length).fill(null);
+    
+    const i = prices.length - 1;
+    const prevIdx = i - 1;
+    const prevPrevIdx = i - 2;
+    
+    const currentPrice = prices[i];
+    const prevPrice = prices[prevIdx];
+    
+    // Safely get current price values with fallbacks
+    const currentClose = currentPrice.close || 0;
+    const currentHigh = currentPrice.high || currentClose;
+    const currentLow = currentPrice.low || currentClose;
+    const currentOpen = currentPrice.open || currentClose;
+    const currentRange = currentHigh - currentLow || 0;
+    const currentVolume = currentPrice.volume || 0;
+    const prevClosePrice = prevPrice?.close || currentClose;
+    
+    const closePosition = currentRange > 0 ? (currentClose - currentLow) / currentRange : 0.5;
+    const bodySize = Math.abs(currentClose - currentOpen) || 0;
+    const bodyRangeRatio = currentRange > 0 ? bodySize / currentRange : 0;
+    
+    const deltaRSI = (indicators.rsi[i] !== null && indicators.rsi[prevIdx] !== null)
+      ? indicators.rsi[i] - indicators.rsi[prevIdx] : null;
+    
+    const deltaMACDHist = (indicators.macd[i]?.histogram !== undefined && indicators.macd[prevIdx]?.histogram !== undefined)
+      ? indicators.macd[i].histogram - indicators.macd[prevIdx].histogram : null;
+    
+    const deltaStochK = (indicators.stoch[i]?.k !== undefined && indicators.stoch[prevIdx]?.k !== undefined)
+      ? indicators.stoch[i].k - indicators.stoch[prevIdx].k : null;
+    
+    const deltaADX = (indicators.adx[i]?.adx !== undefined && indicators.adx[prevIdx]?.adx !== undefined)
+      ? indicators.adx[i].adx - indicators.adx[prevIdx].adx : null;
+    
+    const deltaCCI = (indicators.cci[i] !== null && indicators.cci[prevIdx] !== null)
+      ? indicators.cci[i] - indicators.cci[prevIdx] : null;
+    
+    const deltaMFI = (indicators.mfi[i] !== null && indicators.mfi[prevIdx] !== null)
+      ? indicators.mfi[i] - indicators.mfi[prevIdx] : null;
+
+    const priceChange = currentClose - prevClosePrice;
+    const priceChangePercent = prevClosePrice > 0 ? (priceChange / prevClosePrice) * 100 : 0;
+
+    // Helper function to safely format numbers
+    const safeToFixed = (val, decimals = 2) => {
+      if (val === null || val === undefined || isNaN(val)) return null;
+      return parseFloat(Number(val).toFixed(decimals));
+    };
+
+    const row = {
+      symbol: null,
+      indicatorDate: currentPrice.date,
+      isIntraday: true,
+      marketStatus: 'LIVE',
+      
+      currentOpen: safeToFixed(currentOpen),
+      currentHigh: safeToFixed(currentHigh),
+      currentLow: safeToFixed(currentLow),
+      currentClose: safeToFixed(currentClose),
+      currentVolume: currentVolume || 0,
+      prevClose: safeToFixed(prevClosePrice),
+      priceChange: safeToFixed(priceChange),
+      priceChangePercent: safeToFixed(priceChangePercent),
+      
+      closePosition: safeToFixed(closePosition, 4),
+      bodyRangeRatio: safeToFixed(bodyRangeRatio, 4),
+      upperWickRatio: currentRange > 0 ? safeToFixed((currentHigh - Math.max(currentOpen, currentClose)) / currentRange, 4) : 0,
+      lowerWickRatio: currentRange > 0 ? safeToFixed((Math.min(currentOpen, currentClose) - currentLow) / currentRange, 4) : 0,
+      
+      deltaRSI: safeToFixed(deltaRSI),
+      deltaMACDHist: safeToFixed(deltaMACDHist, 4),
+      deltaStochK: safeToFixed(deltaStochK),
+      deltaADX: safeToFixed(deltaADX),
+      deltaCCI: safeToFixed(deltaCCI),
+      deltaMFI: safeToFixed(deltaMFI),
+      
+      sma5: safeToFixed(indicators.sma5[i]),
+      sma10: safeToFixed(indicators.sma10[i]),
+      sma20: safeToFixed(indicators.sma20[i]),
+      sma50: safeToFixed(indicators.sma50[i]),
+      
+      ema9: safeToFixed(ema9[i]),
+      ema12: safeToFixed(indicators.ema12[i]),
+      ema21: safeToFixed(ema21[i]),
+      ema26: safeToFixed(indicators.ema26[i]),
+      
+      distanceFromSMA5: indicators.sma5[i] ? safeToFixed((currentClose - indicators.sma5[i]) / indicators.sma5[i] * 100, 4) : null,
+      distanceFromSMA10: indicators.sma10[i] ? safeToFixed((currentClose - indicators.sma10[i]) / indicators.sma10[i] * 100, 4) : null,
+      distanceFromSMA20: indicators.sma20[i] ? safeToFixed((currentClose - indicators.sma20[i]) / indicators.sma20[i] * 100, 4) : null,
+      distanceFromSMA50: indicators.sma50[i] ? parseFloat(((currentClose - indicators.sma50[i]) / indicators.sma50[i] * 100).toFixed(4)) : null,
+      
+      aboveSMA5: indicators.sma5[i] && currentClose > indicators.sma5[i] ? 1 : 0,
+      aboveSMA10: indicators.sma10[i] && currentClose > indicators.sma10[i] ? 1 : 0,
+      aboveSMA20: indicators.sma20[i] && currentClose > indicators.sma20[i] ? 1 : 0,
+      aboveSMA50: indicators.sma50[i] && currentClose > indicators.sma50[i] ? 1 : 0,
+      
+      rsi: indicators.rsi[i] ? parseFloat(indicators.rsi[i].toFixed(2)) : null,
+      rsiOversold: indicators.rsi[i] && indicators.rsi[i] < 30 ? 1 : 0,
+      rsiOverbought: indicators.rsi[i] && indicators.rsi[i] > 70 ? 1 : 0,
+      rsiNeutral: indicators.rsi[i] && indicators.rsi[i] >= 30 && indicators.rsi[i] <= 70 ? 1 : 0,
+      
+      macd: indicators.macd[i]?.MACD ? parseFloat(indicators.macd[i].MACD.toFixed(4)) : null,
+      macdSignal: indicators.macd[i]?.signal ? parseFloat(indicators.macd[i].signal.toFixed(4)) : null,
+      macdHistogram: indicators.macd[i]?.histogram ? parseFloat(indicators.macd[i].histogram.toFixed(4)) : null,
+      macdBullish: indicators.macd[i] && indicators.macd[i].histogram > 0 ? 1 : 0,
+      macdCrossUp: indicators.macd[i] && indicators.macd[prevIdx] && indicators.macd[prevIdx].histogram <= 0 && indicators.macd[i].histogram > 0 ? 1 : 0,
+      macdCrossDown: indicators.macd[i] && indicators.macd[prevIdx] && indicators.macd[prevIdx].histogram >= 0 && indicators.macd[i].histogram < 0 ? 1 : 0,
+      
+      bbUpper: safeToFixed(indicators.bb[i]?.upper),
+      bbMiddle: safeToFixed(indicators.bb[i]?.middle),
+      bbLower: safeToFixed(indicators.bb[i]?.lower),
+      bbWidth: indicators.bb[i]?.middle ? safeToFixed((indicators.bb[i].upper - indicators.bb[i].lower) / indicators.bb[i].middle * 100, 4) : null,
+      bbPosition: (indicators.bb[i]?.upper && indicators.bb[i]?.lower && indicators.bb[i].upper !== indicators.bb[i].lower) 
+        ? safeToFixed((currentClose - indicators.bb[i].lower) / (indicators.bb[i].upper - indicators.bb[i].lower), 4) : null,
+      nearBBUpper: indicators.bb[i] && currentClose > indicators.bb[i].upper * 0.98 ? 1 : 0,
+      nearBBLower: indicators.bb[i] && currentClose < indicators.bb[i].lower * 1.02 ? 1 : 0,
+      
+      stochK: safeToFixed(indicators.stoch[i]?.k),
+      stochD: safeToFixed(indicators.stoch[i]?.d),
+      stochOversold: indicators.stoch[i] && indicators.stoch[i].k < 20 ? 1 : 0,
+      stochOverbought: indicators.stoch[i] && indicators.stoch[i].k > 80 ? 1 : 0,
+      
+      adx: safeToFixed(indicators.adx[i]?.adx),
+      plusDI: safeToFixed(indicators.adx[i]?.pdi),
+      minusDI: safeToFixed(indicators.adx[i]?.mdi),
+      strongTrend: indicators.adx[i] && indicators.adx[i].adx > 25 ? 1 : 0,
+      bullishDI: indicators.adx[i] && indicators.adx[i].pdi > indicators.adx[i].mdi ? 1 : 0,
+      
+      atr: safeToFixed(indicators.atr[i]),
+      atrPercent: indicators.atr[i] && currentClose > 0 ? safeToFixed(indicators.atr[i] / currentClose * 100, 4) : null,
+      
+      obv: indicators.obv[i] || null,
+      obvTrend: indicators.obv[i] && indicators.obv[prevIdx] && indicators.obv[i] > indicators.obv[prevIdx] ? 1 : 0,
+      
+      williamsR: safeToFixed(indicators.williamsR[i]),
+      williamsROversold: indicators.williamsR[i] && indicators.williamsR[i] < -80 ? 1 : 0,
+      williamsROverbought: indicators.williamsR[i] && indicators.williamsR[i] > -20 ? 1 : 0,
+      
+      cci: safeToFixed(indicators.cci[i]),
+      cciOversold: indicators.cci[i] && indicators.cci[i] < -100 ? 1 : 0,
+      cciOverbought: indicators.cci[i] && indicators.cci[i] > 100 ? 1 : 0,
+      
+      mfi: safeToFixed(indicators.mfi[i]),
+      mfiOversold: indicators.mfi[i] && indicators.mfi[i] < 20 ? 1 : 0,
+      mfiOverbought: indicators.mfi[i] && indicators.mfi[i] > 80 ? 1 : 0,
+      
+      roc: safeToFixed(indicators.roc[i], 4),
+      momentum: safeToFixed(indicators.momentum[i]),
+      trix: safeToFixed(trix[i], 4),
+      
+      tenkanSen: safeToFixed(ichimoku[i]?.conversion),
+      kijunSen: safeToFixed(ichimoku[i]?.base),
+      senkouSpanA: safeToFixed(ichimoku[i]?.spanA),
+      senkouSpanB: safeToFixed(ichimoku[i]?.spanB),
+      aboveCloud: ichimoku[i] && currentClose > Math.max(ichimoku[i].spanA || 0, ichimoku[i].spanB || 0) ? 1 : 0,
+      belowCloud: ichimoku[i] && currentClose < Math.min(ichimoku[i].spanA || Infinity, ichimoku[i].spanB || Infinity) ? 1 : 0,
+      
+      psar: safeToFixed(psar[i]),
+      psarBullish: psar[i] && currentClose > psar[i] ? 1 : 0,
+      
+      supertrend: safeToFixed(supertrend[i]),
+      supertrendBullish: supertrend[i] && currentClose > supertrend[i] ? 1 : 0,
+      
+      vwap: safeToFixed(vwap[i]),
+      aboveVWAP: vwap[i] && currentClose > vwap[i] ? 1 : 0,
+      
+      pricePosition: safeToFixed(indicators.pricePosition[i]),
+      
+      volumeRatio: safeToFixed(indicators.volumeRatio[i], 4),
+      highVolume: indicators.volumeRatio[i] && indicators.volumeRatio[i] > 1.5 ? 1 : 0,
+      
+      bodySize: safeToFixed(bodySize),
+      upperWick: safeToFixed(currentHigh - Math.max(currentOpen, currentClose)),
+      lowerWick: safeToFixed(Math.min(currentOpen, currentClose) - currentLow),
+      isBullishCandle: currentClose > currentOpen ? 1 : 0,
+      isDoji: bodySize < currentRange * 0.1 ? 1 : 0,
+      
+      gapUp: currentOpen > prevClosePrice ? 1 : 0,
+      gapDown: currentOpen < prevClosePrice ? 1 : 0,
+      gapPercent: prevClosePrice > 0 ? safeToFixed((currentOpen - prevClosePrice) / prevClosePrice * 100, 4) : 0,
+      
+      return1d: safeToFixed(priceChangePercent, 4),
+      return3d: (i >= 3 && prices[i - 3]?.close) ? safeToFixed((currentClose - prices[i - 3].close) / prices[i - 3].close * 100, 4) : null,
+      return5d: (i >= 5 && prices[i - 5]?.close) ? safeToFixed((currentClose - prices[i - 5].close) / prices[i - 5].close * 100, 4) : null,
+    };
+
+    return row;
+  }
 }
 
 module.exports = new IndicatorService();

@@ -263,6 +263,111 @@ exports.handler = async (event, context) => {
       };
     }
 
+    // POST /api/stocks/intraday-indicators
+    if (action === 'intraday-indicators' && event.httpMethod === 'POST') {
+      const { symbol } = JSON.parse(event.body || '{}');
+      
+      if (!symbol) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Please provide a stock symbol' }) };
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+      const now = new Date();
+      
+      const stockData = await stockService.getStockData(symbol, '1y', '1d');
+      
+      if (!stockData.prices || stockData.prices.length < 60) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Not enough historical data for this stock' }) };
+      }
+
+      let prices = [...stockData.prices];
+      let intradayInfo = {
+        isMarketOpen: false,
+        lastUpdate: now.toISOString(),
+        todayData: null
+      };
+
+      try {
+        const quotes = await stockService.getQuote([symbol]);
+        if (quotes && quotes.length > 0) {
+          const currentQuote = quotes[0];
+          
+          const marketState = currentQuote.marketState || 'CLOSED';
+          intradayInfo.isMarketOpen = ['REGULAR', 'PRE', 'POST'].includes(marketState);
+          intradayInfo.marketState = marketState;
+          
+          const lastPrice = prices[prices.length - 1];
+          const lastPriceDate = new Date(lastPrice.date).toISOString().split('T')[0];
+          
+          const todayCandle = {
+            date: now.toISOString(),
+            open: currentQuote.regularMarketOpen || currentQuote.regularMarketPrice,
+            high: currentQuote.regularMarketDayHigh || currentQuote.regularMarketPrice,
+            low: currentQuote.regularMarketDayLow || currentQuote.regularMarketPrice,
+            close: currentQuote.regularMarketPrice,
+            volume: currentQuote.regularMarketVolume || 0,
+            prevClose: currentQuote.regularMarketPreviousClose || lastPrice.close
+          };
+          
+          intradayInfo.todayData = {
+            ...todayCandle,
+            change: currentQuote.regularMarketChange,
+            changePercent: currentQuote.regularMarketChangePercent,
+            bid: currentQuote.bid,
+            ask: currentQuote.ask,
+            bidSize: currentQuote.bidSize,
+            askSize: currentQuote.askSize
+          };
+          
+          if (lastPriceDate === today) {
+            prices[prices.length - 1] = {
+              ...lastPrice,
+              date: lastPrice.date,
+              open: lastPrice.open,
+              high: Math.max(lastPrice.high || 0, todayCandle.high || 0),
+              low: Math.min(lastPrice.low || Infinity, todayCandle.low || Infinity),
+              close: todayCandle.close,
+              volume: todayCandle.volume
+            };
+          } else {
+            prices.push(todayCandle);
+          }
+        }
+      } catch (realtimeErr) {
+        intradayInfo.realtimeError = realtimeErr.message;
+      }
+
+      const indicatorData = indicatorService.getIntradayIndicators(prices);
+      
+      if (indicatorData.error) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: indicatorData.error }) };
+      }
+      
+      indicatorData.symbol = symbol.toUpperCase();
+
+      const featureCount = Object.keys(indicatorData).filter(
+        key => !['symbol', 'indicatorDate', 'isIntraday', 'marketStatus'].includes(key)
+      ).length;
+
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          success: true,
+          data: indicatorData,
+          intraday: intradayInfo,
+          info: {
+            symbol: symbol.toUpperCase(),
+            indicatorDate: indicatorData.indicatorDate,
+            featureCount: featureCount,
+            isIntraday: true,
+            lastUpdate: now.toISOString(),
+            message: `Realtime indicators as of ${now.toLocaleTimeString('id-ID')} WIB`
+          }
+        })
+      };
+    }
+
     // POST /api/stocks/live-indicators
     if (action === 'live-indicators' && event.httpMethod === 'POST') {
       const { symbol, targetDate, useRealtime = true } = JSON.parse(event.body || '{}');
