@@ -6,3 +6,4 @@ client/dist/
 .DS_Store
 .vercel
 .env*.local
+ml_service/venv/

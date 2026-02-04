@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { stockApi } from '../services/api'
 import * as XLSX from 'xlsx'
+import MLPrediction from './MLPrediction'
 
 // All available columns with descriptions
 const ALL_COLUMNS = {
@@ -950,6 +951,12 @@ export default function RegressionData() {
               </div>
             )}
           </div>
+
+          {/* ML Prediction Section */}
+          <MLPrediction 
+            regressionData={data} 
+            selectedColumns={selectedColumns}
+          />
         </div>
       )}
     </div>
