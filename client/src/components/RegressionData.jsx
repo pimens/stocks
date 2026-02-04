@@ -1,7 +1,10 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { stockApi } from '../services/api'
 import * as XLSX from 'xlsx'
 import MLPrediction from './MLPrediction'
+
+// ML Service base URL
+const ML_API_BASE = import.meta.env.VITE_ML_API_BASE || 'http://localhost:8000'
 
 // All available columns with descriptions
 const ALL_COLUMNS = {
@@ -183,6 +186,10 @@ export default function RegressionData() {
   const [downThreshold, setDownThreshold] = useState(-0.5) // -0.5% for DOWN
   const [includeNeutral, setIncludeNeutral] = useState(false)
   
+  // Trained models for feature presets
+  const [trainedModels, setTrainedModels] = useState([])
+  const [selectedPresetModel, setSelectedPresetModel] = useState('')
+  
   // Individual column selection
   const [selectedColumns, setSelectedColumns] = useState(() => {
     // Default: select basic, mlfeatures, delta, rsi, macd, adx columns
@@ -198,6 +205,51 @@ export default function RegressionData() {
   const [filterSymbol, setFilterSymbol] = useState('')
   const [filterTarget, setFilterTarget] = useState('all')
   const [expandedGroups, setExpandedGroups] = useState(new Set(['basic', 'mlfeatures', 'delta']))
+
+  // Fetch trained models on mount
+  useEffect(() => {
+    fetchTrainedModels()
+  }, [])
+
+  const fetchTrainedModels = async () => {
+    try {
+      const response = await fetch(`${ML_API_BASE}/trained-models`)
+      const data = await response.json()
+      setTrainedModels(data.models || [])
+    } catch (err) {
+      console.error('Failed to fetch trained models:', err)
+    }
+  }
+
+  // Handle preset model selection - auto-select features
+  const handlePresetModelChange = (modelId) => {
+    setSelectedPresetModel(modelId)
+    
+    if (!modelId) return
+    
+    const model = trainedModels.find(m => m.id === modelId)
+    if (model && model.features) {
+      // Create a new set with the model's features
+      const modelFeatures = new Set(model.features)
+      
+      // Also include basic columns that are always needed
+      const basicColumns = ['symbol', 'date', 'prevDate', 'target', 'targetLabel', 'priceChange', 'priceChangePercent']
+      basicColumns.forEach(col => modelFeatures.add(col))
+      
+      setSelectedColumns(modelFeatures)
+      
+      // Expand groups that have selected features
+      const groupsToExpand = new Set()
+      model.features.forEach(feature => {
+        const colInfo = ALL_COLUMNS[feature]
+        if (colInfo) {
+          groupsToExpand.add(colInfo.group)
+        }
+      })
+      groupsToExpand.add('basic')
+      setExpandedGroups(groupsToExpand)
+    }
+  }
 
   // Get columns by group
   const getColumnsByGroup = (group) => {
@@ -686,6 +738,40 @@ export default function RegressionData() {
             </button>
           </div>
         </div>
+
+        {/* Model Preset Selector */}
+        {trainedModels.length > 0 && (
+          <div className="mb-4 p-4 bg-gradient-to-r from-purple-900/30 to-blue-900/30 border border-purple-500/30 rounded-lg">
+            <div className="flex items-center gap-3 mb-2">
+              <span className="text-purple-400 text-lg">🤖</span>
+              <label className="text-sm font-medium text-purple-300">
+                Gunakan Fitur dari Model yang Sudah Dilatih
+              </label>
+            </div>
+            <select
+              value={selectedPresetModel}
+              onChange={(e) => handlePresetModelChange(e.target.value)}
+              className="w-full bg-gray-700 border border-purple-500/50 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+            >
+              <option value="">-- Pilih Model untuk Preset Fitur --</option>
+              {trainedModels.map(model => (
+                <option key={model.id} value={model.id}>
+                  {model.model_name || model.model_type} - {model.features?.length || 0} fitur 
+                  (Acc: {(model.metrics?.accuracy * 100).toFixed(1)}%) 
+                  - {new Date(model.trained_at).toLocaleDateString('id-ID')}
+                </option>
+              ))}
+            </select>
+            {selectedPresetModel && (
+              <div className="mt-2 text-xs text-gray-400">
+                <span className="text-green-400">✓</span> Fitur dari model "{trainedModels.find(m => m.id === selectedPresetModel)?.model_name}" telah dipilih otomatis
+              </div>
+            )}
+            <p className="mt-2 text-xs text-gray-500">
+              💡 Pilih model untuk menggunakan fitur yang sama dengan model tersebut
+            </p>
+          </div>
+        )}
 
         <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
           {Object.entries(COLUMN_GROUPS).map(([groupKey, groupInfo]) => {
