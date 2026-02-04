@@ -12,6 +12,7 @@ import LiveIndicatorView from './components/LiveIndicatorView'
 import IntradayIndicatorView from './components/IntradayIndicatorView'
 import FeatureSelection from './components/FeatureSelection'
 import ModelManager from './components/ModelManager'
+import IHSGDashboard from './components/IHSGDashboard'
 
 function App() {
   const [selectedStocks, setSelectedStocks] = useState([])
@@ -99,6 +100,10 @@ function App() {
 
         {activeTab === 'model-manager' && (
           <ModelManager />
+        )}
+
+        {activeTab === 'ihsg' && (
+          <IHSGDashboard />
         )}
       </main>
       
