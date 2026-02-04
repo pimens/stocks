@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import StockPredictor from './StockPredictor'
 
 // ML Service base URL
 const ML_API_BASE = import.meta.env.VITE_ML_API_BASE || 'http://localhost:8000'
@@ -381,17 +382,18 @@ export default function MLPrediction({ regressionData, selectedColumns }) {
       )}
       
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-gray-700 pb-2">
+      <div className="flex gap-2 border-b border-gray-700 pb-2 overflow-x-auto">
         {[
           { id: 'train', label: '🎯 Training', icon: '🎯' },
           { id: 'compare', label: '⚖️ Compare Models', icon: '⚖️' },
           { id: 'predict', label: '🔮 Predict', icon: '🔮' },
+          { id: 'single-predict', label: '📈 Single Stock', icon: '📈' },
           { id: 'history', label: '📜 History', icon: '📜' }
         ].map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2 rounded-t-lg font-medium transition ${
+            className={`px-4 py-2 rounded-t-lg font-medium transition whitespace-nowrap ${
               activeTab === tab.id 
                 ? 'bg-purple-600 text-white' 
                 : 'bg-gray-700/50 text-gray-400 hover:bg-gray-700'
@@ -955,6 +957,11 @@ export default function MLPrediction({ regressionData, selectedColumns }) {
             )}
           </div>
         </div>
+      )}
+      
+      {/* Single Stock Predictor Tab */}
+      {activeTab === 'single-predict' && (
+        <StockPredictor trainedModels={trainedModels} />
       )}
     </div>
   )

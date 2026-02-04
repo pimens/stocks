@@ -149,6 +149,46 @@ module.exports = async (req, res) => {
       return res.json(brokerSummary);
     }
 
+    // POST /api/stocks/predict-data - Get indicator data for prediction on a specific date
+    if (action === 'predict-data' && req.method === 'POST') {
+      const { symbol, targetDate } = req.body;
+      
+      if (!symbol) {
+        return res.status(400).json({ error: 'Please provide a stock symbol' });
+      }
+      
+      if (!targetDate) {
+        return res.status(400).json({ error: 'Please provide a target date' });
+      }
+
+      // Get enough historical data for indicators
+      const stockData = await stockService.getStockData(symbol, '1y', '1d');
+      
+      if (!stockData.prices || stockData.prices.length < 60) {
+        return res.status(400).json({ error: 'Not enough historical data for this stock' });
+      }
+
+      const indicatorData = indicatorService.getIndicatorsForDate(stockData.prices, targetDate);
+      
+      if (indicatorData.error) {
+        return res.status(400).json({ error: indicatorData.error });
+      }
+      
+      // Add symbol
+      indicatorData.symbol = symbol.toUpperCase();
+
+      return res.json({
+        success: true,
+        data: indicatorData,
+        info: {
+          symbol: symbol.toUpperCase(),
+          targetDate: indicatorData.targetDate,
+          indicatorDate: indicatorData.indicatorDate,
+          message: `Indicators from ${indicatorData.indicatorDate} will be used to predict ${indicatorData.targetDate}`
+        }
+      });
+    }
+
     // Not found
     return res.status(404).json({ error: 'Endpoint not found' });
   } catch (error) {

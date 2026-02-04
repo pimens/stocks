@@ -268,4 +268,49 @@ router.post('/regression-data', async (req, res) => {
   }
 });
 
+// POST /api/stocks/predict-data - Get indicator data for prediction on a specific date
+router.post('/predict-data', async (req, res) => {
+  try {
+    const { symbol, targetDate } = req.body;
+    
+    if (!symbol) {
+      return res.status(400).json({ error: 'Please provide a stock symbol' });
+    }
+    
+    if (!targetDate) {
+      return res.status(400).json({ error: 'Please provide a target date' });
+    }
+
+    // Get enough historical data for indicators
+    const stockData = await stockService.getStockData(symbol, '1y', '1d');
+    
+    if (!stockData.prices || stockData.prices.length < 60) {
+      return res.status(400).json({ error: 'Not enough historical data for this stock' });
+    }
+
+    const indicatorData = indicatorService.getIndicatorsForDate(stockData.prices, targetDate);
+    
+    if (indicatorData.error) {
+      return res.status(400).json({ error: indicatorData.error });
+    }
+    
+    // Add symbol
+    indicatorData.symbol = symbol.toUpperCase();
+
+    res.json({
+      success: true,
+      data: indicatorData,
+      info: {
+        symbol: symbol.toUpperCase(),
+        targetDate: indicatorData.targetDate,
+        indicatorDate: indicatorData.indicatorDate,
+        message: `Indicators from ${indicatorData.indicatorDate} will be used to predict ${indicatorData.targetDate}`
+      }
+    });
+  } catch (error) {
+    console.error('Predict data error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;

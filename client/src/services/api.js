@@ -60,6 +60,15 @@ export const stockApi = {
       includeNeutral
     })
     return response.data
+  },
+
+  // Get indicator data for single stock prediction on a specific date
+  getPredictData: async (symbol, targetDate) => {
+    const response = await axios.post(`${API_BASE}/stocks/predict-data`, {
+      symbol,
+      targetDate
+    })
+    return response.data
   }
 }
 

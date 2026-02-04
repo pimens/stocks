@@ -787,6 +787,245 @@ class IndicatorService {
 
     return signals;
   }
+
+  // Get indicator data for a specific date (H-1 data for predicting date H)
+  // targetDate: the date we want to predict (H)
+  // Returns indicators from the day before (H-1)
+  getIndicatorsForDate(prices, targetDate) {
+    const indicators = this.calculateIndicatorsForRegression(prices);
+    
+    // Find the index of target date (H) and previous date (H-1)
+    let targetIdx = -1;
+    for (let i = 0; i < prices.length; i++) {
+      const priceDate = new Date(prices[i].date).toISOString().split('T')[0];
+      const target = new Date(targetDate).toISOString().split('T')[0];
+      if (priceDate === target) {
+        targetIdx = i;
+        break;
+      }
+    }
+
+    // If target date not found, find the nearest date after
+    if (targetIdx === -1) {
+      const targetDateObj = new Date(targetDate);
+      for (let i = 0; i < prices.length; i++) {
+        const priceDate = new Date(prices[i].date);
+        if (priceDate >= targetDateObj) {
+          targetIdx = i;
+          break;
+        }
+      }
+    }
+
+    if (targetIdx < 2) {
+      return { error: 'Not enough historical data for this date' };
+    }
+
+    const i = targetIdx;
+    const prevIdx = i - 1;
+    const prevPrevIdx = i - 2;
+    
+    const prevClose = prices[prevIdx].close;
+    const prevHigh = prices[prevIdx].high;
+    const prevLow = prices[prevIdx].low;
+    const prevOpen = prices[prevIdx].open;
+    const prevRange = prevHigh - prevLow;
+    
+    // Close Position
+    const closePosition = prevRange > 0 ? (prevClose - prevLow) / prevRange : 0.5;
+    
+    // Body/Range Ratio
+    const bodySize = Math.abs(prevClose - prevOpen);
+    const bodyRangeRatio = prevRange > 0 ? bodySize / prevRange : 0;
+    
+    // Delta indicators
+    const deltaRSI = (indicators.rsi[prevIdx] !== null && indicators.rsi[prevPrevIdx] !== null)
+      ? indicators.rsi[prevIdx] - indicators.rsi[prevPrevIdx] : null;
+    
+    const deltaMACDHist = (indicators.macd[prevIdx]?.histogram !== undefined && indicators.macd[prevPrevIdx]?.histogram !== undefined)
+      ? indicators.macd[prevIdx].histogram - indicators.macd[prevPrevIdx].histogram : null;
+    
+    const deltaStochK = (indicators.stoch[prevIdx]?.k !== undefined && indicators.stoch[prevPrevIdx]?.k !== undefined)
+      ? indicators.stoch[prevIdx].k - indicators.stoch[prevPrevIdx].k : null;
+    
+    const deltaADX = (indicators.adx[prevIdx]?.adx !== undefined && indicators.adx[prevPrevIdx]?.adx !== undefined)
+      ? indicators.adx[prevIdx].adx - indicators.adx[prevPrevIdx].adx : null;
+    
+    const deltaCCI = (indicators.cci[prevIdx] !== null && indicators.cci[prevPrevIdx] !== null)
+      ? indicators.cci[prevIdx] - indicators.cci[prevPrevIdx] : null;
+    
+    const deltaMFI = (indicators.mfi[prevIdx] !== null && indicators.mfi[prevPrevIdx] !== null)
+      ? indicators.mfi[prevIdx] - indicators.mfi[prevPrevIdx] : null;
+
+    // Also get actual data for target date if available (for verification)
+    const actualData = {
+      date: prices[i].date,
+      open: prices[i].open,
+      high: prices[i].high,
+      low: prices[i].low,
+      close: prices[i].close,
+      volume: prices[i].volume,
+      priceChange: prices[i].close - prevClose,
+      priceChangePercent: ((prices[i].close - prevClose) / prevClose) * 100
+    };
+
+    const row = {
+      // Meta info
+      symbol: null, // Will be set by caller
+      targetDate: prices[i].date,
+      indicatorDate: prices[prevIdx].date,
+      
+      // Actual data for verification (if available)
+      actualData,
+      
+      // Indicator data (H-1)
+      prevClose: parseFloat(prevClose.toFixed(2)),
+      prevOpen: parseFloat(prevOpen?.toFixed(2) || 0),
+      prevHigh: parseFloat(prevHigh?.toFixed(2) || 0),
+      prevLow: parseFloat(prevLow?.toFixed(2) || 0),
+      prevVolume: prices[prevIdx].volume || 0,
+      
+      // ML Features
+      closePosition: parseFloat(closePosition.toFixed(4)),
+      bodyRangeRatio: parseFloat(bodyRangeRatio.toFixed(4)),
+      upperWickRatio: prevRange > 0 ? parseFloat(((prevHigh - Math.max(prevOpen, prevClose)) / prevRange).toFixed(4)) : 0,
+      lowerWickRatio: prevRange > 0 ? parseFloat(((Math.min(prevOpen, prevClose) - prevLow) / prevRange).toFixed(4)) : 0,
+      
+      // Delta indicators
+      deltaRSI: deltaRSI !== null ? parseFloat(deltaRSI.toFixed(2)) : null,
+      deltaMACDHist: deltaMACDHist !== null ? parseFloat(deltaMACDHist.toFixed(4)) : null,
+      deltaStochK: deltaStochK !== null ? parseFloat(deltaStochK.toFixed(2)) : null,
+      deltaADX: deltaADX !== null ? parseFloat(deltaADX.toFixed(2)) : null,
+      deltaCCI: deltaCCI !== null ? parseFloat(deltaCCI.toFixed(2)) : null,
+      deltaMFI: deltaMFI !== null ? parseFloat(deltaMFI.toFixed(2)) : null,
+      
+      // SMA indicators
+      sma5: indicators.sma5[prevIdx] ? parseFloat(indicators.sma5[prevIdx].toFixed(2)) : null,
+      sma10: indicators.sma10[prevIdx] ? parseFloat(indicators.sma10[prevIdx].toFixed(2)) : null,
+      sma20: indicators.sma20[prevIdx] ? parseFloat(indicators.sma20[prevIdx].toFixed(2)) : null,
+      sma50: indicators.sma50[prevIdx] ? parseFloat(indicators.sma50[prevIdx].toFixed(2)) : null,
+      
+      // EMA indicators
+      ema5: indicators.ema5[prevIdx] ? parseFloat(indicators.ema5[prevIdx].toFixed(2)) : null,
+      ema10: indicators.ema10[prevIdx] ? parseFloat(indicators.ema10[prevIdx].toFixed(2)) : null,
+      ema12: indicators.ema12[prevIdx] ? parseFloat(indicators.ema12[prevIdx].toFixed(2)) : null,
+      ema26: indicators.ema26[prevIdx] ? parseFloat(indicators.ema26[prevIdx].toFixed(2)) : null,
+      
+      // Price vs MA signals
+      priceAboveSMA5: prevClose > (indicators.sma5[prevIdx] || 0) ? 1 : 0,
+      priceAboveSMA10: prevClose > (indicators.sma10[prevIdx] || 0) ? 1 : 0,
+      priceAboveSMA20: prevClose > (indicators.sma20[prevIdx] || 0) ? 1 : 0,
+      priceAboveSMA50: prevClose > (indicators.sma50[prevIdx] || 0) ? 1 : 0,
+      priceAboveEMA12: prevClose > (indicators.ema12[prevIdx] || 0) ? 1 : 0,
+      priceAboveEMA26: prevClose > (indicators.ema26[prevIdx] || 0) ? 1 : 0,
+      
+      // Distance from MA
+      distFromSMA5: indicators.sma5[prevIdx] ? parseFloat(((prevClose - indicators.sma5[prevIdx]) / indicators.sma5[prevIdx] * 100).toFixed(4)) : null,
+      distFromSMA20: indicators.sma20[prevIdx] ? parseFloat(((prevClose - indicators.sma20[prevIdx]) / indicators.sma20[prevIdx] * 100).toFixed(4)) : null,
+      distFromSMA50: indicators.sma50[prevIdx] ? parseFloat(((prevClose - indicators.sma50[prevIdx]) / indicators.sma50[prevIdx] * 100).toFixed(4)) : null,
+      
+      // SMA crossover signals
+      sma5AboveSMA10: (indicators.sma5[prevIdx] || 0) > (indicators.sma10[prevIdx] || 0) ? 1 : 0,
+      sma10AboveSMA20: (indicators.sma10[prevIdx] || 0) > (indicators.sma20[prevIdx] || 0) ? 1 : 0,
+      sma20AboveSMA50: (indicators.sma20[prevIdx] || 0) > (indicators.sma50[prevIdx] || 0) ? 1 : 0,
+      
+      // RSI
+      rsi: indicators.rsi[prevIdx] ? parseFloat(indicators.rsi[prevIdx].toFixed(2)) : null,
+      rsiOversold: indicators.rsi[prevIdx] && indicators.rsi[prevIdx] < 30 ? 1 : 0,
+      rsiOverbought: indicators.rsi[prevIdx] && indicators.rsi[prevIdx] > 70 ? 1 : 0,
+      rsiNeutral: indicators.rsi[prevIdx] && indicators.rsi[prevIdx] >= 30 && indicators.rsi[prevIdx] <= 70 ? 1 : 0,
+      
+      // MACD
+      macd: indicators.macd[prevIdx]?.MACD ? parseFloat(indicators.macd[prevIdx].MACD.toFixed(4)) : null,
+      macdSignal: indicators.macd[prevIdx]?.signal ? parseFloat(indicators.macd[prevIdx].signal.toFixed(4)) : null,
+      macdHistogram: indicators.macd[prevIdx]?.histogram ? parseFloat(indicators.macd[prevIdx].histogram.toFixed(4)) : null,
+      macdBullish: indicators.macd[prevIdx] && indicators.macd[prevIdx].MACD > indicators.macd[prevIdx].signal ? 1 : 0,
+      macdPositive: indicators.macd[prevIdx] && indicators.macd[prevIdx].MACD > 0 ? 1 : 0,
+      
+      // Bollinger Bands
+      bbUpper: indicators.bb[prevIdx]?.upper ? parseFloat(indicators.bb[prevIdx].upper.toFixed(2)) : null,
+      bbMiddle: indicators.bb[prevIdx]?.middle ? parseFloat(indicators.bb[prevIdx].middle.toFixed(2)) : null,
+      bbLower: indicators.bb[prevIdx]?.lower ? parseFloat(indicators.bb[prevIdx].lower.toFixed(2)) : null,
+      bbWidth: indicators.bb[prevIdx] ? parseFloat(((indicators.bb[prevIdx].upper - indicators.bb[prevIdx].lower) / indicators.bb[prevIdx].middle * 100).toFixed(4)) : null,
+      priceBelowLowerBB: indicators.bb[prevIdx] && prevClose < indicators.bb[prevIdx].lower ? 1 : 0,
+      priceAboveUpperBB: indicators.bb[prevIdx] && prevClose > indicators.bb[prevIdx].upper ? 1 : 0,
+      
+      // Stochastic
+      stochK: indicators.stoch[prevIdx]?.k ? parseFloat(indicators.stoch[prevIdx].k.toFixed(2)) : null,
+      stochD: indicators.stoch[prevIdx]?.d ? parseFloat(indicators.stoch[prevIdx].d.toFixed(2)) : null,
+      stochOversold: indicators.stoch[prevIdx] && indicators.stoch[prevIdx].k < 20 ? 1 : 0,
+      stochOverbought: indicators.stoch[prevIdx] && indicators.stoch[prevIdx].k > 80 ? 1 : 0,
+      stochBullishCross: indicators.stoch[prevIdx] && indicators.stoch[prevIdx].k > indicators.stoch[prevIdx].d ? 1 : 0,
+      
+      // ADX
+      adx: indicators.adx[prevIdx]?.adx ? parseFloat(indicators.adx[prevIdx].adx.toFixed(2)) : null,
+      pdi: indicators.adx[prevIdx]?.pdi ? parseFloat(indicators.adx[prevIdx].pdi.toFixed(2)) : null,
+      mdi: indicators.adx[prevIdx]?.mdi ? parseFloat(indicators.adx[prevIdx].mdi.toFixed(2)) : null,
+      strongTrend: indicators.adx[prevIdx] && indicators.adx[prevIdx].adx > 25 ? 1 : 0,
+      bullishDI: indicators.adx[prevIdx] && indicators.adx[prevIdx].pdi > indicators.adx[prevIdx].mdi ? 1 : 0,
+      
+      // ATR
+      atr: indicators.atr[prevIdx] ? parseFloat(indicators.atr[prevIdx].toFixed(2)) : null,
+      atrPercent: indicators.atr[prevIdx] ? parseFloat((indicators.atr[prevIdx] / prevClose * 100).toFixed(4)) : null,
+      
+      // OBV
+      obv: indicators.obv[prevIdx] || 0,
+      obvChange: (prevIdx >= 1 && indicators.obv[prevIdx] !== null && indicators.obv[prevIdx - 1] !== null) 
+        ? indicators.obv[prevIdx] - indicators.obv[prevIdx - 1] 
+        : null,
+      obvTrend: (prevIdx >= 1 && indicators.obv[prevIdx] !== null && indicators.obv[prevIdx - 1] !== null)
+        ? (indicators.obv[prevIdx] > indicators.obv[prevIdx - 1] ? 1 : (indicators.obv[prevIdx] < indicators.obv[prevIdx - 1] ? -1 : 0))
+        : null,
+      
+      // Williams %R
+      williamsR: indicators.williamsR[prevIdx] ? parseFloat(indicators.williamsR[prevIdx].toFixed(2)) : null,
+      williamsROversold: indicators.williamsR[prevIdx] && indicators.williamsR[prevIdx] < -80 ? 1 : 0,
+      williamsROverbought: indicators.williamsR[prevIdx] && indicators.williamsR[prevIdx] > -20 ? 1 : 0,
+      
+      // CCI
+      cci: indicators.cci[prevIdx] ? parseFloat(indicators.cci[prevIdx].toFixed(2)) : null,
+      cciOversold: indicators.cci[prevIdx] && indicators.cci[prevIdx] < -100 ? 1 : 0,
+      cciOverbought: indicators.cci[prevIdx] && indicators.cci[prevIdx] > 100 ? 1 : 0,
+      
+      // MFI
+      mfi: indicators.mfi[prevIdx] ? parseFloat(indicators.mfi[prevIdx].toFixed(2)) : null,
+      mfiOversold: indicators.mfi[prevIdx] && indicators.mfi[prevIdx] < 20 ? 1 : 0,
+      mfiOverbought: indicators.mfi[prevIdx] && indicators.mfi[prevIdx] > 80 ? 1 : 0,
+      
+      // ROC
+      roc: indicators.roc[prevIdx] ? parseFloat(indicators.roc[prevIdx].toFixed(4)) : null,
+      rocPositive: indicators.roc[prevIdx] && indicators.roc[prevIdx] > 0 ? 1 : 0,
+      
+      // Momentum
+      momentum: indicators.momentum[prevIdx] ? parseFloat(indicators.momentum[prevIdx].toFixed(2)) : null,
+      momentumPositive: indicators.momentum[prevIdx] && indicators.momentum[prevIdx] > 0 ? 1 : 0,
+      
+      // Price Position
+      pricePosition: indicators.pricePosition[prevIdx] ? parseFloat(indicators.pricePosition[prevIdx].toFixed(2)) : null,
+      
+      // Volume Ratio
+      volumeRatio: indicators.volumeRatio[prevIdx] ? parseFloat(indicators.volumeRatio[prevIdx].toFixed(4)) : null,
+      highVolume: indicators.volumeRatio[prevIdx] && indicators.volumeRatio[prevIdx] > 1.5 ? 1 : 0,
+      
+      // Candlestick patterns
+      bodySize: parseFloat(Math.abs(prices[prevIdx].close - prices[prevIdx].open).toFixed(2)),
+      upperWick: parseFloat((prices[prevIdx].high - Math.max(prices[prevIdx].open, prices[prevIdx].close)).toFixed(2)),
+      lowerWick: parseFloat((Math.min(prices[prevIdx].open, prices[prevIdx].close) - prices[prevIdx].low).toFixed(2)),
+      isBullishCandle: prices[prevIdx].close > prices[prevIdx].open ? 1 : 0,
+      isDoji: Math.abs(prices[prevIdx].close - prices[prevIdx].open) < (prices[prevIdx].high - prices[prevIdx].low) * 0.1 ? 1 : 0,
+      
+      // Price gaps
+      gapUp: prices[prevIdx].open > prices[prevPrevIdx]?.close ? 1 : 0,
+      gapDown: prices[prevIdx].open < prices[prevPrevIdx]?.close ? 1 : 0,
+      
+      // Returns
+      return1d: prevIdx >= 2 ? parseFloat(((prices[prevIdx].close - prices[prevPrevIdx].close) / prices[prevPrevIdx].close * 100).toFixed(4)) : null,
+      return3d: prevIdx >= 4 ? parseFloat(((prices[prevIdx].close - prices[prevIdx - 3].close) / prices[prevIdx - 3].close * 100).toFixed(4)) : null,
+      return5d: prevIdx >= 6 ? parseFloat(((prices[prevIdx].close - prices[prevIdx - 5].close) / prices[prevIdx - 5].close * 100).toFixed(4)) : null,
+    };
+
+    return row;
+  }
 }
 
 module.exports = new IndicatorService();
