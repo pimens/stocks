@@ -8,6 +8,7 @@ import StockList from './components/StockList'
 import StockDetail from './components/StockDetail'
 import AIAnalysis from './components/AIAnalysis'
 import RegressionData from './components/RegressionData'
+import LiveIndicatorView from './components/LiveIndicatorView'
 
 function App() {
   const [selectedStocks, setSelectedStocks] = useState([])
@@ -79,6 +80,10 @@ function App() {
 
         {activeTab === 'regression' && (
           <RegressionData />
+        )}
+
+        {activeTab === 'live' && (
+          <LiveIndicatorView />
         )}
       </main>
       

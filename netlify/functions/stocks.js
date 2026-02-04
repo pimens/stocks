@@ -221,6 +221,142 @@ exports.handler = async (event, context) => {
       };
     }
 
+    // POST /api/stocks/predict-data
+    if (action === 'predict-data' && event.httpMethod === 'POST') {
+      const { symbol, targetDate } = JSON.parse(event.body || '{}');
+      
+      if (!symbol) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Please provide a stock symbol' }) };
+      }
+      
+      if (!targetDate) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Please provide a target date' }) };
+      }
+
+      const stockData = await stockService.getStockData(symbol, '1y', '1d');
+      
+      if (!stockData.prices || stockData.prices.length < 60) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Not enough historical data for this stock' }) };
+      }
+
+      const indicatorData = indicatorService.getIndicatorsForDate(stockData.prices, targetDate);
+      
+      if (indicatorData.error) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: indicatorData.error }) };
+      }
+      
+      indicatorData.symbol = symbol.toUpperCase();
+
+      return { 
+        statusCode: 200, 
+        headers, 
+        body: JSON.stringify({
+          success: true,
+          data: indicatorData,
+          info: {
+            symbol: symbol.toUpperCase(),
+            targetDate: indicatorData.targetDate,
+            indicatorDate: indicatorData.indicatorDate,
+            message: `Indicators from ${indicatorData.indicatorDate} will be used to predict ${indicatorData.targetDate}`
+          }
+        })
+      };
+    }
+
+    // POST /api/stocks/live-indicators
+    if (action === 'live-indicators' && event.httpMethod === 'POST') {
+      const { symbol, targetDate, useRealtime = true } = JSON.parse(event.body || '{}');
+      
+      if (!symbol) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Please provide a stock symbol' }) };
+      }
+      
+      if (!targetDate) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Please provide a target date' }) };
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+      const isToday = targetDate === today;
+      
+      const stockData = await stockService.getStockData(symbol, '1y', '1d');
+      
+      if (!stockData.prices || stockData.prices.length < 60) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Not enough historical data for this stock' }) };
+      }
+
+      let prices = [...stockData.prices];
+      let isRealtime = false;
+
+      if (isToday && useRealtime) {
+        try {
+          const quotes = await stockService.getQuote([symbol]);
+          if (quotes && quotes.length > 0) {
+            const currentQuote = quotes[0];
+            const lastPrice = prices[prices.length - 1];
+            const lastPriceDate = new Date(lastPrice.date).toISOString().split('T')[0];
+            
+            if (lastPriceDate === today) {
+              prices[prices.length - 1] = {
+                ...lastPrice,
+                date: lastPrice.date,
+                open: lastPrice.open,
+                high: Math.max(lastPrice.high || 0, currentQuote.regularMarketPrice || 0),
+                low: Math.min(lastPrice.low || Infinity, currentQuote.regularMarketPrice || Infinity),
+                close: currentQuote.regularMarketPrice || lastPrice.close,
+                volume: currentQuote.regularMarketVolume || lastPrice.volume
+              };
+              isRealtime = true;
+            } else {
+              const prevClose = lastPrice.close;
+              prices.push({
+                date: new Date().toISOString(),
+                open: currentQuote.regularMarketOpen || currentQuote.regularMarketPrice,
+                high: currentQuote.regularMarketDayHigh || currentQuote.regularMarketPrice,
+                low: currentQuote.regularMarketDayLow || currentQuote.regularMarketPrice,
+                close: currentQuote.regularMarketPrice,
+                volume: currentQuote.regularMarketVolume || 0,
+                prevClose: prevClose
+              });
+              isRealtime = true;
+            }
+          }
+        } catch (realtimeErr) {
+          console.warn('Could not fetch realtime data:', realtimeErr.message);
+        }
+      }
+
+      const indicatorData = indicatorService.getIndicatorsForDate(prices, targetDate);
+      
+      if (indicatorData.error) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: indicatorData.error }) };
+      }
+      
+      indicatorData.symbol = symbol.toUpperCase();
+
+      const featureCount = Object.keys(indicatorData).filter(
+        key => !['symbol', 'targetDate', 'indicatorDate', 'actualData'].includes(key)
+      ).length;
+
+      return { 
+        statusCode: 200, 
+        headers, 
+        body: JSON.stringify({
+          success: true,
+          data: indicatorData,
+          info: {
+            symbol: symbol.toUpperCase(),
+            targetDate: indicatorData.targetDate,
+            indicatorDate: indicatorData.indicatorDate,
+            isRealtime: isRealtime,
+            featureCount: featureCount,
+            message: isRealtime 
+              ? `Using realtime data as of ${new Date().toLocaleTimeString()}`
+              : `Indicators from ${indicatorData.indicatorDate} for predicting ${indicatorData.targetDate}`
+          }
+        })
+      };
+    }
+
     return { statusCode: 404, headers, body: JSON.stringify({ error: 'Endpoint not found' }) };
   } catch (error) {
     console.error('Stock API Error:', error);

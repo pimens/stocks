@@ -313,4 +313,108 @@ router.post('/predict-data', async (req, res) => {
   }
 });
 
+// POST /api/stocks/live-indicators - Get live indicator data with realtime support
+router.post('/live-indicators', async (req, res) => {
+  try {
+    const { symbol, targetDate, useRealtime = true } = req.body;
+    
+    if (!symbol) {
+      return res.status(400).json({ error: 'Please provide a stock symbol' });
+    }
+    
+    if (!targetDate) {
+      return res.status(400).json({ error: 'Please provide a target date' });
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    const isToday = targetDate === today;
+    
+    // Get historical data
+    const stockData = await stockService.getStockData(symbol, '1y', '1d');
+    
+    if (!stockData.prices || stockData.prices.length < 60) {
+      return res.status(400).json({ error: 'Not enough historical data for this stock' });
+    }
+
+    let prices = [...stockData.prices];
+    let isRealtime = false;
+
+    // If targeting today and useRealtime is true, try to get current price
+    if (isToday && useRealtime) {
+      try {
+        const quotes = await stockService.getQuote([symbol]);
+        if (quotes && quotes.length > 0) {
+          const currentQuote = quotes[0];
+          
+          // Check if we already have today's data in prices
+          const lastPrice = prices[prices.length - 1];
+          const lastPriceDate = new Date(lastPrice.date).toISOString().split('T')[0];
+          
+          if (lastPriceDate === today) {
+            // Update today's data with current realtime values
+            prices[prices.length - 1] = {
+              ...lastPrice,
+              date: lastPrice.date,
+              open: lastPrice.open, // Keep the original open
+              high: Math.max(lastPrice.high || 0, currentQuote.regularMarketPrice || 0),
+              low: Math.min(lastPrice.low || Infinity, currentQuote.regularMarketPrice || Infinity),
+              close: currentQuote.regularMarketPrice || lastPrice.close,
+              volume: currentQuote.regularMarketVolume || lastPrice.volume
+            };
+            isRealtime = true;
+          } else {
+            // Add today as a new entry with realtime data
+            const prevClose = lastPrice.close;
+            prices.push({
+              date: new Date().toISOString(),
+              open: currentQuote.regularMarketOpen || currentQuote.regularMarketPrice,
+              high: currentQuote.regularMarketDayHigh || currentQuote.regularMarketPrice,
+              low: currentQuote.regularMarketDayLow || currentQuote.regularMarketPrice,
+              close: currentQuote.regularMarketPrice,
+              volume: currentQuote.regularMarketVolume || 0,
+              prevClose: prevClose
+            });
+            isRealtime = true;
+          }
+        }
+      } catch (realtimeErr) {
+        console.warn('Could not fetch realtime data, using historical:', realtimeErr.message);
+      }
+    }
+
+    // Calculate indicators for the target date
+    const indicatorData = indicatorService.getIndicatorsForDate(prices, targetDate);
+    
+    if (indicatorData.error) {
+      return res.status(400).json({ error: indicatorData.error });
+    }
+    
+    // Add symbol
+    indicatorData.symbol = symbol.toUpperCase();
+
+    // Count features
+    const featureCount = Object.keys(indicatorData).filter(
+      key => !['symbol', 'targetDate', 'indicatorDate', 'actualData'].includes(key)
+    ).length;
+
+    res.json({
+      success: true,
+      data: indicatorData,
+      info: {
+        symbol: symbol.toUpperCase(),
+        targetDate: indicatorData.targetDate,
+        indicatorDate: indicatorData.indicatorDate,
+        isRealtime: isRealtime,
+        featureCount: featureCount,
+        message: isRealtime 
+          ? `Using realtime data as of ${new Date().toLocaleTimeString()}`
+          : `Indicators from ${indicatorData.indicatorDate} for predicting ${indicatorData.targetDate}`
+      }
+    });
+  } catch (error) {
+    console.error('Live indicators error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;

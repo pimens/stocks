@@ -794,25 +794,38 @@ class IndicatorService {
   getIndicatorsForDate(prices, targetDate) {
     const indicators = this.calculateIndicatorsForRegression(prices);
     
-    // Find the index of target date (H) and previous date (H-1)
+    const targetDateStr = new Date(targetDate).toISOString().split('T')[0];
+    const lastPriceDate = new Date(prices[prices.length - 1].date).toISOString().split('T')[0];
+    const targetDateObj = new Date(targetDate);
+    const lastPriceDateObj = new Date(prices[prices.length - 1].date);
+    
     let targetIdx = -1;
-    for (let i = 0; i < prices.length; i++) {
-      const priceDate = new Date(prices[i].date).toISOString().split('T')[0];
-      const target = new Date(targetDate).toISOString().split('T')[0];
-      if (priceDate === target) {
-        targetIdx = i;
-        break;
-      }
-    }
-
-    // If target date not found, find the nearest date after
-    if (targetIdx === -1) {
-      const targetDateObj = new Date(targetDate);
+    let isFutureDate = false;
+    
+    // Check if target date is in the future (after last available data)
+    if (targetDateObj > lastPriceDateObj) {
+      // For future dates, use the last available data as "today" (H)
+      // and calculate indicators from H-1
+      targetIdx = prices.length - 1;
+      isFutureDate = true;
+    } else {
+      // Find the index of target date (H)
       for (let i = 0; i < prices.length; i++) {
-        const priceDate = new Date(prices[i].date);
-        if (priceDate >= targetDateObj) {
+        const priceDate = new Date(prices[i].date).toISOString().split('T')[0];
+        if (priceDate === targetDateStr) {
           targetIdx = i;
           break;
+        }
+      }
+
+      // If target date not found, find the nearest date after
+      if (targetIdx === -1) {
+        for (let i = 0; i < prices.length; i++) {
+          const priceDate = new Date(prices[i].date);
+          if (priceDate >= targetDateObj) {
+            targetIdx = i;
+            break;
+          }
         }
       }
     }
@@ -821,9 +834,11 @@ class IndicatorService {
       return { error: 'Not enough historical data for this date' };
     }
 
+    // For future dates: i is the last available day, prevIdx is H-1 (used for indicators)
+    // For normal dates: i is target day H, prevIdx is H-1 (used for indicators)
     const i = targetIdx;
-    const prevIdx = i - 1;
-    const prevPrevIdx = i - 2;
+    const prevIdx = isFutureDate ? i : i - 1;  // For future: use last day as H-1
+    const prevPrevIdx = isFutureDate ? i - 1 : i - 2;
     
     const prevClose = prices[prevIdx].close;
     const prevHigh = prices[prevIdx].high;
@@ -872,11 +887,12 @@ class IndicatorService {
     const row = {
       // Meta info
       symbol: null, // Will be set by caller
-      targetDate: prices[i].date,
+      targetDate: isFutureDate ? targetDate : prices[i].date,
       indicatorDate: prices[prevIdx].date,
+      isFutureDate: isFutureDate,
       
-      // Actual data for verification (if available)
-      actualData,
+      // Actual data for verification (if available) - not available for future dates
+      actualData: isFutureDate ? null : actualData,
       
       // Indicator data (H-1)
       prevClose: parseFloat(prevClose.toFixed(2)),
