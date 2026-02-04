@@ -513,6 +513,127 @@ export default function LiveIndicatorView() {
               besok pagi.
             </p>
           </div>
+
+          {/* Verification with actual data - for past dates */}
+          {indicatorData?.data?.actualData && (
+            <div className="mt-4 pt-4 border-t border-gray-600">
+              <h4 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                <span>📋</span> Verifikasi dengan Data Aktual
+                <span className="text-xs text-gray-500 font-normal">(Tanggal sudah lewat)</span>
+              </h4>
+              {(() => {
+                const actualChange = indicatorData.data.actualData.priceChangePercent
+                const actualClose = indicatorData.data.actualData.close
+                const prevClose = indicatorData.data.prevClose
+                
+                // Simple direction: positive = UP, negative = DOWN
+                const actualDirection = actualChange > 0 ? 'UP' : actualChange < 0 ? 'DOWN' : 'NEUTRAL'
+                const predictedDirection = getPredictionLabel(prediction.predictedValue)
+                
+                // Check if prediction is correct
+                const isCorrect = (predictedDirection === 'UP' && actualChange > 0) || 
+                                 (predictedDirection === 'DOWN' && actualChange < 0)
+                const isNeutral = actualChange === 0
+                
+                return (
+                  <div className="space-y-3">
+                    {/* Actual Price Movement */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="bg-gray-800/50 rounded p-3">
+                        <p className="text-gray-400 text-xs">Harga H-1</p>
+                        <p className="text-white font-medium">Rp {prevClose?.toLocaleString()}</p>
+                      </div>
+                      <div className="bg-gray-800/50 rounded p-3">
+                        <p className="text-gray-400 text-xs">Harga Aktual (H)</p>
+                        <p className="text-white font-medium">Rp {actualClose?.toLocaleString()}</p>
+                      </div>
+                      <div className="bg-gray-800/50 rounded p-3">
+                        <p className="text-gray-400 text-xs">Perubahan</p>
+                        <p className={`font-bold ${actualChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {actualChange >= 0 ? '+' : ''}{actualChange.toFixed(2)}%
+                        </p>
+                      </div>
+                      <div className="bg-gray-800/50 rounded p-3">
+                        <p className="text-gray-400 text-xs">Arah Aktual</p>
+                        <p className={`font-bold text-lg ${actualChange > 0 ? 'text-green-400' : actualChange < 0 ? 'text-red-400' : 'text-yellow-400'}`}>
+                          {actualDirection === 'UP' ? '📈 NAIK' : actualDirection === 'DOWN' ? '📉 TURUN' : '➡️ FLAT'}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    {/* Verification Result */}
+                    <div className={`p-4 rounded-lg border ${
+                      isNeutral 
+                        ? 'bg-yellow-900/30 border-yellow-500/50' 
+                        : isCorrect 
+                          ? 'bg-green-900/30 border-green-500/50' 
+                          : 'bg-red-900/30 border-red-500/50'
+                    }`}>
+                      <div className="flex items-center gap-4">
+                        <span className="text-4xl">
+                          {isNeutral ? '🤷' : isCorrect ? '✅' : '❌'}
+                        </span>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2 flex-wrap">
+                            <div className="flex items-center gap-2">
+                              <span className="text-gray-400">Prediksi:</span>
+                              <span className={`font-bold text-lg ${
+                                predictedDirection === 'UP' ? 'text-green-400' : 'text-red-400'
+                              }`}>
+                                {predictedDirection === 'UP' ? '📈' : '📉'} {predictedDirection}
+                              </span>
+                            </div>
+                            <span className="text-gray-500">vs</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-gray-400">Aktual:</span>
+                              <span className={`font-bold text-lg ${actualChange > 0 ? 'text-green-400' : actualChange < 0 ? 'text-red-400' : 'text-yellow-400'}`}>
+                                {actualDirection === 'UP' ? '📈' : actualDirection === 'DOWN' ? '📉' : '➡️'} {actualDirection}
+                              </span>
+                            </div>
+                          </div>
+                          <p className={`text-lg font-bold ${
+                            isNeutral 
+                              ? 'text-yellow-400' 
+                              : isCorrect 
+                                ? 'text-green-400' 
+                                : 'text-red-400'
+                          }`}>
+                            {isNeutral 
+                              ? '⚠️ Harga tidak berubah (FLAT)' 
+                              : isCorrect 
+                                ? '🎉 Prediksi BENAR!' 
+                                : '😞 Prediksi SALAH'}
+                          </p>
+                        </div>
+                        {!isNeutral && (
+                          <div className={`text-6xl font-black ${isCorrect ? 'text-green-500' : 'text-red-500'}`}>
+                            {isCorrect ? '👍' : '👎'}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
+            </div>
+          )}
+          
+          {/* Info for future dates */}
+          {!indicatorData?.data?.actualData && indicatorData?.data?.isFutureDate && (
+            <div className="mt-4 pt-4 border-t border-gray-600">
+              <div className="p-3 rounded-lg bg-blue-900/30 border border-blue-500/50">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">🔮</span>
+                  <div>
+                    <p className="text-blue-300 font-medium">Prediksi untuk tanggal yang akan datang</p>
+                    <p className="text-sm text-gray-400">
+                      Verifikasi akan tersedia setelah tanggal {formatDate(indicatorData?.data?.targetDate)} berlalu
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -597,6 +718,71 @@ export default function LiveIndicatorView() {
               )}
             </div>
           </div>
+
+          {/* Actual Data Card - Show when date is in the past */}
+          {indicatorData.data.actualData && (
+            <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+              <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+                <span>📈</span> Data Aktual Hari H
+                <span className="text-xs text-gray-500 font-normal">({formatDate(indicatorData.data.targetDate)})</span>
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+                <div className="bg-gray-700/50 rounded p-3">
+                  <p className="text-gray-400 text-xs">Open</p>
+                  <p className="text-white font-medium">Rp {indicatorData.data.actualData.open?.toLocaleString()}</p>
+                </div>
+                <div className="bg-gray-700/50 rounded p-3">
+                  <p className="text-gray-400 text-xs">High</p>
+                  <p className="text-green-400 font-medium">Rp {indicatorData.data.actualData.high?.toLocaleString()}</p>
+                </div>
+                <div className="bg-gray-700/50 rounded p-3">
+                  <p className="text-gray-400 text-xs">Low</p>
+                  <p className="text-red-400 font-medium">Rp {indicatorData.data.actualData.low?.toLocaleString()}</p>
+                </div>
+                <div className="bg-gray-700/50 rounded p-3">
+                  <p className="text-gray-400 text-xs">Close</p>
+                  <p className="text-white font-bold">Rp {indicatorData.data.actualData.close?.toLocaleString()}</p>
+                </div>
+                <div className="bg-gray-700/50 rounded p-3">
+                  <p className="text-gray-400 text-xs">Change</p>
+                  <p className={`font-bold ${indicatorData.data.actualData.priceChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {indicatorData.data.actualData.priceChange >= 0 ? '+' : ''}{indicatorData.data.actualData.priceChange?.toFixed(0)}
+                  </p>
+                </div>
+                <div className="bg-gray-700/50 rounded p-3">
+                  <p className="text-gray-400 text-xs">Change %</p>
+                  <p className={`font-bold text-lg ${indicatorData.data.actualData.priceChangePercent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {indicatorData.data.actualData.priceChangePercent >= 0 ? '+' : ''}{indicatorData.data.actualData.priceChangePercent?.toFixed(2)}%
+                  </p>
+                </div>
+                <div className={`rounded p-3 ${
+                  indicatorData.data.actualData.priceChangePercent > 0 
+                    ? 'bg-green-900/30 border border-green-500/30' 
+                    : indicatorData.data.actualData.priceChangePercent < 0 
+                      ? 'bg-red-900/30 border border-red-500/30' 
+                      : 'bg-yellow-900/30 border border-yellow-500/30'
+                }`}>
+                  <p className="text-gray-400 text-xs">Arah</p>
+                  <p className={`font-bold text-lg ${
+                    indicatorData.data.actualData.priceChangePercent > 0 
+                      ? 'text-green-400' 
+                      : indicatorData.data.actualData.priceChangePercent < 0 
+                        ? 'text-red-400' 
+                        : 'text-yellow-400'
+                  }`}>
+                    {indicatorData.data.actualData.priceChangePercent > 0 
+                      ? '📈 UP' 
+                      : indicatorData.data.actualData.priceChangePercent < 0 
+                        ? '📉 DOWN' 
+                        : '➡️ FLAT'}
+                  </p>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-3">
+                💡 Data aktual tersedia karena tanggal yang dipilih sudah lewat. Gunakan untuk verifikasi prediksi model.
+              </p>
+            </div>
+          )}
 
           {/* Model Features Quick View */}
           {selectedModel && modelFeatures.length > 0 && (
