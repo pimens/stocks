@@ -205,6 +205,7 @@ class TrainRequest(BaseModel):
     cv_folds: int = 5
     custom_params: Optional[Dict[str, Any]] = None
     model_name: Optional[str] = None  # Custom name for the model
+    skip_save: bool = False  # If True, don't save model to memory (for feature selection testing)
 
 
 class PredictRequest(BaseModel):
@@ -382,36 +383,38 @@ def train_model(request: TrainRequest):
         # Use custom name if provided, otherwise use default model name
         display_name = request.model_name if request.model_name else model_config["name"]
         
-        # Store model
-        trained_models[model_id] = {
-            "model": model,
-            "scaler": scaler,
-            "imputer": imputer,
-            "label_encoder": label_encoder,
-            "model_type": request.model_type,
-            "model_name": display_name,
-            "features": request.features,
-            "target": request.target,
-            "original_classes": original_classes,
-            "metrics": metrics,
-            "feature_importance": feature_importance,
-            "params": params,
-            "trained_at": datetime.now().isoformat(),
-            "data_shape": {"samples": len(df), "features": len(request.features)}
-        }
-        
-        # Add to history
-        model_history.append({
-            "model_id": model_id,
-            "model_type": request.model_type,
-            "model_name": display_name,
-            "accuracy": metrics["accuracy"],
-            "trained_at": datetime.now().isoformat()
-        })
+        # Store model only if skip_save is False
+        if not request.skip_save:
+            trained_models[model_id] = {
+                "model": model,
+                "scaler": scaler,
+                "imputer": imputer,
+                "label_encoder": label_encoder,
+                "model_type": request.model_type,
+                "model_name": display_name,
+                "features": request.features,
+                "target": request.target,
+                "original_classes": original_classes,
+                "metrics": metrics,
+                "feature_importance": feature_importance,
+                "params": params,
+                "trained_at": datetime.now().isoformat(),
+                "data_shape": {"samples": len(df), "features": len(request.features)}
+            }
+            
+            # Add to history
+            model_history.append({
+                "model_id": model_id,
+                "model_type": request.model_type,
+                "model_name": display_name,
+                "accuracy": metrics["accuracy"],
+                "trained_at": datetime.now().isoformat()
+            })
         
         return {
             "success": True,
-            "model_id": model_id,
+            "model_id": model_id if not request.skip_save else None,
+            "model_saved": not request.skip_save,
             "model_name": display_name,
             "model_type_name": model_config["name"],
             "metrics": metrics,

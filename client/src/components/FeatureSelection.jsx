@@ -301,8 +301,8 @@ export default function FeatureSelection() {
     }
   }
 
-  // Train model with specific features
-  const trainWithFeatures = async (features) => {
+  // Train model with specific features (skip_save=true for testing during feature selection)
+  const trainWithFeatures = async (features, skipSave = true) => {
     const response = await fetch(`${ML_API_BASE}/train`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -311,7 +311,8 @@ export default function FeatureSelection() {
         features: features,
         target: 'target',
         model_type: selectedModel,
-        test_size: 0.2
+        test_size: 0.2,
+        skip_save: skipSave
       })
     })
 
@@ -457,7 +458,7 @@ export default function FeatureSelection() {
 
   // Save the best model
   const saveBestModel = async () => {
-    if (!bestResult || !bestResult.modelId) {
+    if (!bestResult) {
       setError('Tidak ada model terbaik untuk disimpan')
       return
     }
@@ -471,7 +472,7 @@ export default function FeatureSelection() {
     setError(null)
 
     try {
-      // Re-train with the best features and save
+      // Re-train with the best features and save (skip_save: false to actually save)
       const response = await fetch(`${ML_API_BASE}/train`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -481,7 +482,8 @@ export default function FeatureSelection() {
           target: 'target',
           model_type: selectedModel,
           test_size: 0.2,
-          model_name: modelName.trim()
+          model_name: modelName.trim(),
+          skip_save: false  // Explicitly save this model
         })
       })
 

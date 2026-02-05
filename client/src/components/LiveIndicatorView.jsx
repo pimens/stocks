@@ -216,18 +216,34 @@ export default function LiveIndicatorView() {
       })
 
       const result = await response.json()
+      console.log('Prediction API response:', result) // Debug log
 
       if (!response.ok) {
         throw new Error(result.detail || 'Prediction failed')
       }
 
+      // Extract predicted value - handle different response formats
+      let predictedValue = null
+      if (result.predictions && result.predictions.length > 0) {
+        predictedValue = result.predictions[0]
+      }
+
+      // Extract probabilities
+      let probs = null
+      if (result.probabilities && result.probabilities.length > 0) {
+        probs = result.probabilities[0]
+      }
+
+      console.log('Extracted prediction:', predictedValue, 'Probabilities:', probs) // Debug log
+
       setPrediction({
         ...result,
         model: selectedModel,
-        predictedValue: result.predictions[0],
-        probabilities: result.probabilities ? result.probabilities[0] : null
+        predictedValue: predictedValue,
+        probabilities: probs
       })
     } catch (err) {
+      console.error('Prediction error:', err)
       setError(err.message)
     } finally {
       setPredicting(false)
@@ -280,9 +296,23 @@ export default function LiveIndicatorView() {
   }
 
   const getPredictionLabel = (value) => {
-    if (value === 1 || value === 'UP' || value === '1') return 'UP'
-    if (value === 0 || value === 'DOWN' || value === '0') return 'DOWN'
-    return value
+    // Handle null/undefined
+    if (value === null || value === undefined) return 'UNKNOWN'
+    
+    // Convert to string for comparison
+    const strValue = String(value).toUpperCase()
+    
+    // Check for UP variants
+    if (value === 1 || strValue === 'UP' || strValue === '1' || strValue === 'TRUE') return 'UP'
+    
+    // Check for DOWN variants  
+    if (value === 0 || strValue === 'DOWN' || strValue === '0' || strValue === 'FALSE') return 'DOWN'
+    
+    // Check for NEUTRAL
+    if (value === -1 || strValue === 'NEUTRAL' || strValue === '-1') return 'NEUTRAL'
+    
+    // Return raw value if not recognized
+    return strValue || 'UNKNOWN'
   }
 
   const isToday = targetDate === new Date().toISOString().split('T')[0]
@@ -430,7 +460,9 @@ export default function LiveIndicatorView() {
         <div className={`border rounded-xl p-6 ${
           getPredictionLabel(prediction.predictedValue) === 'UP' 
             ? 'bg-green-900/30 border-green-500/50' 
-            : 'bg-red-900/30 border-red-500/50'
+            : getPredictionLabel(prediction.predictedValue) === 'DOWN'
+              ? 'bg-red-900/30 border-red-500/50'
+              : 'bg-yellow-900/30 border-yellow-500/50'
         }`}>
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
@@ -443,9 +475,14 @@ export default function LiveIndicatorView() {
             </div>
             <div className="text-right">
               <div className={`text-5xl font-bold ${
-                getPredictionLabel(prediction.predictedValue) === 'UP' ? 'text-green-400' : 'text-red-400'
+                getPredictionLabel(prediction.predictedValue) === 'UP' 
+                  ? 'text-green-400' 
+                  : getPredictionLabel(prediction.predictedValue) === 'DOWN'
+                    ? 'text-red-400'
+                    : 'text-yellow-400'
               }`}>
-                {getPredictionLabel(prediction.predictedValue) === 'UP' ? '📈' : '📉'} {getPredictionLabel(prediction.predictedValue)}
+                {getPredictionLabel(prediction.predictedValue) === 'UP' ? '📈' : 
+                 getPredictionLabel(prediction.predictedValue) === 'DOWN' ? '📉' : '⚖️'} {getPredictionLabel(prediction.predictedValue)}
               </div>
               {prediction.probabilities && (
                 <div className="text-sm text-gray-400 mt-2">
@@ -495,8 +532,15 @@ export default function LiveIndicatorView() {
                 <span className="text-orange-400"> (data terbaru tersedia)</span>
               )}, 
               model memprediksi harga saham {symbol} akan{' '}
-              <span className={getPredictionLabel(prediction.predictedValue) === 'UP' ? 'text-green-400' : 'text-red-400'}>
-                {getPredictionLabel(prediction.predictedValue) === 'UP' ? 'NAIK' : 'TURUN'}
+              <span className={
+                getPredictionLabel(prediction.predictedValue) === 'UP' 
+                  ? 'text-green-400' 
+                  : getPredictionLabel(prediction.predictedValue) === 'DOWN'
+                    ? 'text-red-400'
+                    : 'text-yellow-400'
+              }>
+                {getPredictionLabel(prediction.predictedValue) === 'UP' ? 'NAIK' : 
+                 getPredictionLabel(prediction.predictedValue) === 'DOWN' ? 'TURUN' : 'NETRAL/TIDAK JELAS'}
               </span>{' '}
               besok pagi.
             </p>
