@@ -313,15 +313,24 @@ export default function StockSelector({
   multiple = true,
   showPrices = true,
   maxSelect = null,
-  compact = false
+  compact = false,
+  excludeIndex = false
 }) {
   const [stockPrices, setStockPrices] = useState({})
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
-  const [expandedRanges, setExpandedRanges] = useState(new Set(['index']))
+  const [expandedRanges, setExpandedRanges] = useState(new Set(excludeIndex ? [] : ['index']))
   const [expandedSectors, setExpandedSectors] = useState(new Set())
   const [viewMode, setViewMode] = useState('price') // 'price' or 'sector'
   const [lastUpdate, setLastUpdate] = useState(null)
+
+  // Filter stocks based on excludeIndex prop
+  const availableStocks = useMemo(() => {
+    if (excludeIndex) {
+      return IDX_STOCKS.filter(s => !s.isIndex)
+    }
+    return IDX_STOCKS
+  }, [excludeIndex])
 
   // Fetch all stock prices
   const fetchPrices = useCallback(async () => {
@@ -385,12 +394,13 @@ export default function StockSelector({
     const groups = {}
     
     PRICE_RANGES.forEach(range => {
+      if (excludeIndex && range.isIndex) return
       groups[range.id] = []
     })
     
-    IDX_STOCKS.forEach(stock => {
+    availableStocks.forEach(stock => {
       if (stock.isIndex) {
-        groups['index'].push(stock)
+        if (!excludeIndex) groups['index'].push(stock)
         return
       }
       
@@ -406,13 +416,13 @@ export default function StockSelector({
     })
     
     return groups
-  }, [stockPrices])
+  }, [stockPrices, availableStocks, excludeIndex])
 
   // Group stocks by sector
   const stocksBySector = useMemo(() => {
     const groups = {}
     
-    IDX_STOCKS.forEach(stock => {
+    availableStocks.forEach(stock => {
       const sector = stock.sector || 'Others'
       if (!groups[sector]) groups[sector] = []
       groups[sector].push({
@@ -427,14 +437,14 @@ export default function StockSelector({
     })
     
     return groups
-  }, [stockPrices])
+  }, [stockPrices, availableStocks])
 
   // Filtered stocks based on search
   const filteredStocks = useMemo(() => {
-    if (!searchTerm) return IDX_STOCKS
+    if (!searchTerm) return availableStocks
     
     const term = searchTerm.toLowerCase()
-    return IDX_STOCKS.filter(stock => 
+    return availableStocks.filter(stock => 
       stock.code.toLowerCase().includes(term) ||
       stock.name.toLowerCase().includes(term) ||
       stock.sector.toLowerCase().includes(term)
@@ -883,17 +893,17 @@ export default function StockSelector({
         <span className="text-sm text-gray-400">Quick Select:</span>
         <button
           onClick={() => {
-            const top20 = IDX_STOCKS.slice(0, 21).map(s => s.code)
+            const top20 = availableStocks.slice(0, excludeIndex ? 20 : 21).map(s => s.code)
             onSelect(top20)
           }}
           className="px-2 py-1 text-xs bg-blue-600/30 text-blue-400 rounded hover:bg-blue-600/50"
         >
-          Top 20 + IHSG
+          {excludeIndex ? 'Top 20' : 'Top 20 + IHSG'}
         </button>
         <button
           onClick={() => {
-            const banks = IDX_STOCKS.filter(s => s.sector === 'Banking').map(s => s.code)
-            onSelect(['^JKSE', ...banks])
+            const banks = availableStocks.filter(s => s.sector === 'Banking').map(s => s.code)
+            onSelect(excludeIndex ? banks : ['^JKSE', ...banks])
           }}
           className="px-2 py-1 text-xs bg-emerald-600/30 text-emerald-400 rounded hover:bg-emerald-600/50"
         >
@@ -901,8 +911,8 @@ export default function StockSelector({
         </button>
         <button
           onClick={() => {
-            const mining = IDX_STOCKS.filter(s => s.sector === 'Mining').map(s => s.code)
-            onSelect(['^JKSE', ...mining])
+            const mining = availableStocks.filter(s => s.sector === 'Mining').map(s => s.code)
+            onSelect(excludeIndex ? mining : ['^JKSE', ...mining])
           }}
           className="px-2 py-1 text-xs bg-yellow-600/30 text-yellow-400 rounded hover:bg-yellow-600/50"
         >
@@ -910,8 +920,8 @@ export default function StockSelector({
         </button>
         <button
           onClick={() => {
-            const tech = IDX_STOCKS.filter(s => s.sector === 'Technology').map(s => s.code)
-            onSelect(['^JKSE', ...tech])
+            const tech = availableStocks.filter(s => s.sector === 'Technology').map(s => s.code)
+            onSelect(excludeIndex ? tech : ['^JKSE', ...tech])
           }}
           className="px-2 py-1 text-xs bg-indigo-600/30 text-indigo-400 rounded hover:bg-indigo-600/50"
         >
@@ -919,8 +929,8 @@ export default function StockSelector({
         </button>
         <button
           onClick={() => {
-            const property = IDX_STOCKS.filter(s => s.sector === 'Property').map(s => s.code)
-            onSelect(['^JKSE', ...property])
+            const property = availableStocks.filter(s => s.sector === 'Property').map(s => s.code)
+            onSelect(excludeIndex ? property : ['^JKSE', ...property])
           }}
           className="px-2 py-1 text-xs bg-cyan-600/30 text-cyan-400 rounded hover:bg-cyan-600/50"
         >
@@ -928,8 +938,8 @@ export default function StockSelector({
         </button>
         <button
           onClick={() => {
-            const consumer = IDX_STOCKS.filter(s => s.sector === 'Consumer').map(s => s.code)
-            onSelect(['^JKSE', ...consumer])
+            const consumer = availableStocks.filter(s => s.sector === 'Consumer').map(s => s.code)
+            onSelect(excludeIndex ? consumer : ['^JKSE', ...consumer])
           }}
           className="px-2 py-1 text-xs bg-orange-600/30 text-orange-400 rounded hover:bg-orange-600/50"
         >

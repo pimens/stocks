@@ -167,7 +167,7 @@ const AVAILABLE_MODELS = [
 
 export default function FeatureSelection() {
   // Data fetching state
-  const [selectedStocks, setSelectedStocks] = useState(['^JKSE', 'BBCA', 'BBRI', 'BMRI', 'BBNI', 'TLKM'])
+  const [selectedStocks, setSelectedStocks] = useState(['BBCA', 'BBRI', 'BMRI', 'BBNI', 'TLKM'])
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [loading, setLoading] = useState(false)
@@ -518,7 +518,7 @@ export default function FeatureSelection() {
         </p>
       </div>
 
-      {/* Stock Selection - Using StockSelector */}
+      {/* Stock Selection - Using StockSelector (no IHSG) */}
       <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6">
         <h3 className="text-lg font-semibold text-white mb-4">1. Pilih Saham untuk Training</h3>
         <StockSelector
@@ -526,6 +526,7 @@ export default function FeatureSelection() {
           onSelect={setSelectedStocks}
           multiple={true}
           showPrices={true}
+          excludeIndex={true}
         />
       </div>
 
@@ -730,28 +731,111 @@ export default function FeatureSelection() {
         </div>
       )}
 
-      {/* Data Summary */}
+      {/* Training Data Summary */}
       {data && (
-        <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
-          <h4 className="text-white font-semibold mb-2">📊 Data Loaded</h4>
-          <div className="grid grid-cols-4 gap-4 text-sm">
-            <div>
-              <span className="text-gray-400">Records:</span>
-              <span className="text-white ml-2">{data.summary.totalRecords.toLocaleString()}</span>
+        <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6">
+          <h4 className="text-lg font-semibold text-white mb-4">📊 Data Training</h4>
+          
+          {/* Summary Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+            <div className="bg-gray-700/50 rounded-lg p-3">
+              <span className="text-gray-400 text-xs block">Total Records</span>
+              <span className="text-xl font-bold text-white">{data.summary.totalRecords.toLocaleString()}</span>
             </div>
-            <div>
-              <span className="text-gray-400">UP:</span>
-              <span className="text-green-400 ml-2">{data.summary.targetDistribution.up} ({data.summary.targetDistribution.upPercent}%)</span>
+            <div className="bg-green-900/30 rounded-lg p-3">
+              <span className="text-gray-400 text-xs block">UP (1)</span>
+              <span className="text-xl font-bold text-green-400">{data.summary.targetDistribution.up.toLocaleString()}</span>
+              <span className="text-xs text-green-400/70 ml-1">({data.summary.targetDistribution.upPercent}%)</span>
             </div>
-            <div>
-              <span className="text-gray-400">DOWN:</span>
-              <span className="text-red-400 ml-2">{data.summary.targetDistribution.down} ({data.summary.targetDistribution.downPercent}%)</span>
+            <div className="bg-red-900/30 rounded-lg p-3">
+              <span className="text-gray-400 text-xs block">DOWN (0)</span>
+              <span className="text-xl font-bold text-red-400">{data.summary.targetDistribution.down.toLocaleString()}</span>
+              <span className="text-xs text-red-400/70 ml-1">({data.summary.targetDistribution.downPercent}%)</span>
             </div>
-            <div>
-              <span className="text-gray-400">Fitur kandidat:</span>
-              <span className="text-white ml-2">{selectedFeatures.size}</span>
+            <div className="bg-gray-700/50 rounded-lg p-3">
+              <span className="text-gray-400 text-xs block">Saham</span>
+              <span className="text-xl font-bold text-white">{data.summary.symbolsProcessed}</span>
+            </div>
+            <div className="bg-gray-700/50 rounded-lg p-3">
+              <span className="text-gray-400 text-xs block">Fitur Kandidat</span>
+              <span className="text-xl font-bold text-purple-400">{selectedFeatures.size}</span>
             </div>
           </div>
+
+          {/* Date Range & Threshold Info */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div className="bg-gray-900/50 rounded-lg p-3">
+              <span className="text-gray-400 text-sm block mb-1">📅 Rentang Tanggal</span>
+              <span className="text-white">{data.summary.dateRange.start} s/d {data.summary.dateRange.end}</span>
+            </div>
+            {data.summary.thresholds && (
+              <div className="bg-gray-900/50 rounded-lg p-3">
+                <span className="text-gray-400 text-sm block mb-1">🎯 Threshold</span>
+                <span className="text-green-400">UP ≥{data.summary.thresholds.upThreshold}%</span>
+                <span className="text-gray-500 mx-2">|</span>
+                <span className="text-red-400">DOWN ≤{data.summary.thresholds.downThreshold}%</span>
+              </div>
+            )}
+          </div>
+
+          {/* Stocks Used */}
+          <div className="bg-gray-900/50 rounded-lg p-3">
+            <span className="text-gray-400 text-sm block mb-2">📈 Saham yang Digunakan</span>
+            <div className="flex flex-wrap gap-1">
+              {selectedStocks.map(stock => (
+                <span key={stock} className="px-2 py-0.5 text-xs bg-blue-900/50 text-blue-300 rounded">
+                  {stock}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Sample Data Preview */}
+          {data.data && data.data.length > 0 && (
+            <div className="mt-4">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-gray-400 text-sm">📋 Contoh Data (5 baris pertama)</span>
+              </div>
+              <div className="overflow-x-auto max-h-48">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-900/80 sticky top-0">
+                    <tr>
+                      <th className="px-2 py-1.5 text-left text-gray-400">Symbol</th>
+                      <th className="px-2 py-1.5 text-left text-gray-400">Date</th>
+                      <th className="px-2 py-1.5 text-right text-gray-400">Target</th>
+                      <th className="px-2 py-1.5 text-right text-gray-400">Change %</th>
+                      <th className="px-2 py-1.5 text-right text-gray-400">RSI</th>
+                      <th className="px-2 py-1.5 text-right text-gray-400">MACD</th>
+                      <th className="px-2 py-1.5 text-right text-gray-400">ADX</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-700/50">
+                    {data.data.slice(0, 5).map((row, idx) => (
+                      <tr key={idx} className="hover:bg-gray-700/30">
+                        <td className="px-2 py-1.5 text-white font-medium">{row.symbol}</td>
+                        <td className="px-2 py-1.5 text-gray-300">{row.date}</td>
+                        <td className="px-2 py-1.5 text-right">
+                          {row.target === 1 ? (
+                            <span className="text-green-400">↑ UP</span>
+                          ) : row.target === -1 ? (
+                            <span className="text-yellow-400">⚖️</span>
+                          ) : (
+                            <span className="text-red-400">↓ DOWN</span>
+                          )}
+                        </td>
+                        <td className={`px-2 py-1.5 text-right ${row.priceChangePercent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {row.priceChangePercent?.toFixed(2)}%
+                        </td>
+                        <td className="px-2 py-1.5 text-right text-gray-300">{row.rsi?.toFixed(1)}</td>
+                        <td className="px-2 py-1.5 text-right text-gray-300">{row.macdHistogram?.toFixed(2)}</td>
+                        <td className="px-2 py-1.5 text-right text-gray-300">{row.adx?.toFixed(1)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

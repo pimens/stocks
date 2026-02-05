@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { stockApi } from '../services/api'
 import * as XLSX from 'xlsx'
 import MLPrediction from './MLPrediction'
+import StockSelector from './StockSelector'
 
 // ML Service base URL
 const ML_API_BASE = import.meta.env.VITE_ML_API_BASE || 'http://localhost:8000'
@@ -166,15 +167,10 @@ const COLUMN_GROUPS = {
   returns: { label: '📆 Returns', color: 'sky' },
 }
 
-const POPULAR_STOCKS = [
-  'BBCA', 'BBRI', 'BMRI', 'BBNI', 'TLKM', 'ASII', 'UNVR', 'HMSP', 'GGRM', 'ICBP',
-  'INDF', 'KLBF', 'PGAS', 'SMGR', 'UNTR', 'WIKA', 'PTBA', 'ANTM', 'INCO', 'EXCL',
-  'ISAT', 'ADRO', 'ITMG', 'MEDC', 'CPIN', 'JPFA', 'BRIS', 'ACES', 'ERAA', 'MAPI'
-]
+// Stock selection now uses StockSelector component with full IDX stocks
 
 export default function RegressionData() {
   const [selectedStocks, setSelectedStocks] = useState([])
-  const [customStock, setCustomStock] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [loading, setLoading] = useState(false)
@@ -332,26 +328,6 @@ export default function RegressionData() {
       start: start.toISOString().split('T')[0],
       end: end.toISOString().split('T')[0]
     }
-  }
-
-  const handleAddStock = (stock) => {
-    const stockCode = stock.toUpperCase().trim()
-    if (stockCode && !selectedStocks.includes(stockCode)) {
-      setSelectedStocks([...selectedStocks, stockCode])
-    }
-    setCustomStock('')
-  }
-
-  const handleRemoveStock = (stock) => {
-    setSelectedStocks(selectedStocks.filter(s => s !== stock))
-  }
-
-  const handleSelectAllStocks = () => {
-    setSelectedStocks([...new Set([...selectedStocks, ...POPULAR_STOCKS])])
-  }
-
-  const handleClearAllStocks = () => {
-    setSelectedStocks([])
   }
 
   const handleFetchData = async () => {
@@ -538,79 +514,16 @@ export default function RegressionData() {
         </p>
       </div>
 
-      {/* Stock Selection */}
+      {/* Stock Selection - Using StockSelector (no IHSG) */}
       <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6">
         <h3 className="text-lg font-semibold text-white mb-4">1. Pilih Saham</h3>
-        
-        <div className="flex gap-2 mb-4">
-          <input
-            type="text"
-            value={customStock}
-            onChange={(e) => setCustomStock(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleAddStock(customStock)}
-            placeholder="Masukkan kode saham (contoh: BBCA)"
-            className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
-          />
-          <button
-            onClick={() => handleAddStock(customStock)}
-            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition"
-          >
-            Tambah
-          </button>
-        </div>
-
-        <div className="flex flex-wrap gap-2 mb-4">
-          <button
-            onClick={handleSelectAllStocks}
-            className="px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition"
-          >
-            Pilih Semua Populer
-          </button>
-          <button
-            onClick={handleClearAllStocks}
-            className="px-3 py-1 text-sm bg-gray-600 hover:bg-gray-700 text-white rounded transition"
-          >
-            Hapus Semua
-          </button>
-        </div>
-
-        <div className="flex flex-wrap gap-2 mb-4">
-          {POPULAR_STOCKS.map(stock => (
-            <button
-              key={stock}
-              onClick={() => selectedStocks.includes(stock) ? handleRemoveStock(stock) : handleAddStock(stock)}
-              className={`px-3 py-1 text-sm rounded transition ${
-                selectedStocks.includes(stock)
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              {stock}
-            </button>
-          ))}
-        </div>
-
-        {selectedStocks.length > 0 && (
-          <div className="mt-4">
-            <p className="text-sm text-gray-400 mb-2">Saham terpilih ({selectedStocks.length}):</p>
-            <div className="flex flex-wrap gap-2">
-              {selectedStocks.map(stock => (
-                <span
-                  key={stock}
-                  className="inline-flex items-center gap-1 px-3 py-1 bg-purple-900/50 text-purple-300 rounded-full text-sm"
-                >
-                  {stock}
-                  <button
-                    onClick={() => handleRemoveStock(stock)}
-                    className="hover:text-red-400 transition"
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
+        <StockSelector
+          selectedStocks={selectedStocks}
+          onSelect={setSelectedStocks}
+          multiple={true}
+          showPrices={true}
+          excludeIndex={true}
+        />
       </div>
 
       {/* Date Range */}
