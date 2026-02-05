@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { FiSearch, FiX, FiChevronDown, FiChevronUp, FiCheck, FiRefreshCw } from 'react-icons/fi'
+import { STOCK_PRICES, PRICE_RANGES as STATIC_PRICE_RANGES, getStocksByPriceRange } from '../data/stockPrices'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001/api'
 
@@ -292,19 +293,19 @@ const SECTOR_COLORS = {
   'Others': 'gray',
 }
 
-// Price ranges for grouping
+// Price ranges for grouping - use static data with enhanced labels
 const PRICE_RANGES = [
   { id: 'index', label: '📊 Indeks', min: -Infinity, max: Infinity, isIndex: true },
-  { id: 'under50', label: '< Rp 50', min: 0, max: 50 },
-  { id: '50-100', label: 'Rp 50-100', min: 50, max: 100 },
-  { id: '100-200', label: 'Rp 100-200', min: 100, max: 200 },
-  { id: '200-500', label: 'Rp 200-500', min: 200, max: 500 },
-  { id: '500-1000', label: 'Rp 500-1.000', min: 500, max: 1000 },
-  { id: '1000-2000', label: 'Rp 1.000-2.000', min: 1000, max: 2000 },
-  { id: '2000-5000', label: 'Rp 2.000-5.000', min: 2000, max: 5000 },
-  { id: '5000-10000', label: 'Rp 5.000-10.000', min: 5000, max: 10000 },
-  { id: '10000-20000', label: 'Rp 10.000-20.000', min: 10000, max: 20000 },
-  { id: 'above20000', label: '> Rp 20.000', min: 20000, max: Infinity },
+  { id: 'micro', label: '🔹 Saham Gorengan (< Rp 50)', min: 0, max: 50 },
+  { id: 'penny', label: '💰 Rp 50 - 100', min: 50, max: 100 },
+  { id: 'cheap', label: '💵 Rp 100 - 200', min: 100, max: 200 },
+  { id: 'low', label: '📊 Rp 200 - 500', min: 200, max: 500 },
+  { id: 'medium', label: '📈 Rp 500 - 1.000', min: 500, max: 1000 },
+  { id: 'mid', label: '💹 Rp 1.000 - 2.000', min: 1000, max: 2000 },
+  { id: 'high', label: '🏦 Rp 2.000 - 5.000', min: 2000, max: 5000 },
+  { id: 'premium', label: '💎 Rp 5.000 - 10.000', min: 5000, max: 10000 },
+  { id: 'elite', label: '👑 Rp 10.000 - 50.000', min: 10000, max: 50000 },
+  { id: 'ultra', label: '🚀 > Rp 50.000', min: 50000, max: Infinity },
 ]
 
 export default function StockSelector({ 
@@ -316,13 +317,21 @@ export default function StockSelector({
   compact = false,
   excludeIndex = false
 }) {
-  const [stockPrices, setStockPrices] = useState({})
+  // Initialize stock prices from static data
+  const [stockPrices, setStockPrices] = useState(() => {
+    // Pre-populate with static prices
+    const prices = {}
+    Object.entries(STOCK_PRICES).forEach(([code, price]) => {
+      prices[code] = { price, change: 0, changePercent: 0 }
+    })
+    return prices
+  })
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
-  const [expandedRanges, setExpandedRanges] = useState(new Set(excludeIndex ? [] : ['index']))
+  const [expandedRanges, setExpandedRanges] = useState(new Set(excludeIndex ? ['micro'] : ['index']))
   const [expandedSectors, setExpandedSectors] = useState(new Set())
   const [viewMode, setViewMode] = useState('price') // 'price' or 'sector'
-  const [lastUpdate, setLastUpdate] = useState(null)
+  const [lastUpdate, setLastUpdate] = useState(new Date())
 
   // Filter stocks based on excludeIndex prop
   const availableStocks = useMemo(() => {
@@ -332,7 +341,7 @@ export default function StockSelector({
     return IDX_STOCKS
   }, [excludeIndex])
 
-  // Fetch all stock prices
+  // Fetch all stock prices (optional - can use static data)
   const fetchPrices = useCallback(async () => {
     if (!showPrices) return
     
@@ -347,7 +356,7 @@ export default function StockSelector({
         chunks.push(stockCodes.slice(i, i + 50))
       }
       
-      const allPrices = {}
+      const allPrices = { ...stockPrices } // Start with static prices
       
       for (const chunk of chunks) {
         try {
@@ -362,9 +371,9 @@ export default function StockSelector({
             if (data.quotes) {
               data.quotes.forEach(q => {
                 allPrices[q.symbol] = {
-                  price: q.price,
-                  change: q.change,
-                  changePercent: q.changePercent
+                  price: q.price || STOCK_PRICES[q.symbol] || 0,
+                  change: q.change || 0,
+                  changePercent: q.changePercent || 0
                 }
               })
             }
@@ -381,15 +390,15 @@ export default function StockSelector({
     } finally {
       setLoading(false)
     }
-  }, [showPrices])
+  }, [showPrices, stockPrices])
 
+  // Don't auto-fetch, use static prices by default
   useEffect(() => {
-    if (showPrices) {
-      fetchPrices()
-    }
-  }, [fetchPrices, showPrices])
+    // Static prices are already loaded
+    setLastUpdate(new Date())
+  }, [])
 
-  // Group stocks by price range
+  // Group stocks by price range using static prices
   const stocksByPriceRange = useMemo(() => {
     const groups = {}
     
