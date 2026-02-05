@@ -1,12 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { stockApi } from '../services/api'
+import StockSelector, { IDX_STOCKS } from './StockSelector'
 
 const ML_API_BASE = import.meta.env.VITE_ML_API_BASE || 'http://localhost:8000'
-
-const POPULAR_STOCKS = [
-  'BBCA', 'BBRI', 'BMRI', 'BBNI', 'TLKM', 'ASII', 'UNVR', 'HMSP', 'GGRM', 'ICBP',
-  'INDF', 'KLBF', 'PGAS', 'SMGR', 'UNTR', 'WIKA', 'PTBA', 'ANTM', 'INCO', 'EXCL'
-]
 
 // Group features by category
 const FEATURE_CATEGORIES = {
@@ -315,24 +311,16 @@ export default function LiveIndicatorView() {
               type="text"
               value={symbol}
               onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-              placeholder="BBCA"
+              placeholder="BBCA atau ^JKSE"
               className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500 uppercase"
             />
-            <div className="flex flex-wrap gap-1 mt-2">
-              {POPULAR_STOCKS.slice(0, 6).map(stock => (
-                <button
-                  key={stock}
-                  onClick={() => setSymbol(stock)}
-                  className={`px-2 py-0.5 text-xs rounded transition ${
-                    symbol === stock 
-                      ? 'bg-purple-600 text-white' 
-                      : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
-                  }`}
-                >
-                  {stock}
-                </button>
-              ))}
-            </div>
+            <StockSelector
+              selectedStocks={symbol ? [symbol] : []}
+              onSelect={(stocks) => setSymbol(stocks[0] || '')}
+              multiple={false}
+              showPrices={false}
+              compact={true}
+            />
           </div>
 
           {/* Date Selection */}

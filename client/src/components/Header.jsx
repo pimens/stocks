@@ -2,11 +2,10 @@ import { FiTrendingUp, FiBarChart2, FiCpu, FiDatabase, FiActivity, FiZap, FiTarg
 
 function Header({ activeTab, setActiveTab }) {
   const tabs = [
-    { id: 'ihsg', label: 'IHSG', icon: FiGlobe },
     { id: 'screener', label: 'Screener', icon: FiBarChart2 },
     { id: 'detail', label: 'Detail', icon: FiTrendingUp },
-    { id: 'ai', label: 'AI Analysis', icon: FiCpu },
-    { id: 'regression', label: 'ML Training', icon: FiDatabase },
+    { id: 'ai', label: 'AI', icon: FiCpu },
+    { id: 'regression', label: 'ML Train', icon: FiDatabase },
     { id: 'feature-selection', label: 'Feature Select', icon: FiTarget },
     { id: 'model-manager', label: 'Models', icon: FiPackage },
     { id: 'live', label: 'Live Predict', icon: FiActivity },

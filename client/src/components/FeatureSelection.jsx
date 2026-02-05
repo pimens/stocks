@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { stockApi } from '../services/api'
+import StockSelector from './StockSelector'
 
 // ML Service base URL
 const ML_API_BASE = import.meta.env.VITE_ML_API_BASE || 'http://localhost:8000'
@@ -156,11 +157,6 @@ const FEATURE_GROUPS = {
   price: { label: '💵 Price Data', color: 'gray' },
 }
 
-const POPULAR_STOCKS = [
-  'BBCA', 'BBRI', 'BMRI', 'BBNI', 'TLKM', 'ASII', 'UNVR', 'HMSP', 'GGRM', 'ICBP',
-  'INDF', 'KLBF', 'PGAS', 'SMGR', 'UNTR', 'WIKA', 'PTBA', 'ANTM', 'INCO', 'EXCL'
-]
-
 const AVAILABLE_MODELS = [
   { value: 'random_forest', label: 'Random Forest', icon: '🌲' },
   { value: 'xgboost', label: 'XGBoost', icon: '🚀' },
@@ -171,8 +167,7 @@ const AVAILABLE_MODELS = [
 
 export default function FeatureSelection() {
   // Data fetching state
-  const [selectedStocks, setSelectedStocks] = useState(['BBCA', 'BBRI', 'BMRI', 'BBNI', 'TLKM'])
-  const [customStock, setCustomStock] = useState('')
+  const [selectedStocks, setSelectedStocks] = useState(['^JKSE', 'BBCA', 'BBRI', 'BMRI', 'BBNI', 'TLKM'])
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [loading, setLoading] = useState(false)
@@ -273,19 +268,6 @@ export default function FeatureSelection() {
       }
       return newSet
     })
-  }
-
-  // Stock handlers
-  const handleAddStock = (stock) => {
-    const stockCode = stock.toUpperCase().trim()
-    if (stockCode && !selectedStocks.includes(stockCode)) {
-      setSelectedStocks([...selectedStocks, stockCode])
-    }
-    setCustomStock('')
-  }
-
-  const handleRemoveStock = (stock) => {
-    setSelectedStocks(selectedStocks.filter(s => s !== stock))
   }
 
   // Fetch regression data
@@ -536,56 +518,15 @@ export default function FeatureSelection() {
         </p>
       </div>
 
-      {/* Stock Selection */}
+      {/* Stock Selection - Using StockSelector */}
       <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6">
         <h3 className="text-lg font-semibold text-white mb-4">1. Pilih Saham untuk Training</h3>
-
-        <div className="flex gap-2 mb-4">
-          <input
-            type="text"
-            value={customStock}
-            onChange={(e) => setCustomStock(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleAddStock(customStock)}
-            placeholder="Masukkan kode saham"
-            className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-green-500"
-          />
-          <button
-            onClick={() => handleAddStock(customStock)}
-            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition"
-          >
-            Tambah
-          </button>
-        </div>
-
-        <div className="flex flex-wrap gap-2 mb-4">
-          {POPULAR_STOCKS.map(stock => (
-            <button
-              key={stock}
-              onClick={() => selectedStocks.includes(stock) ? handleRemoveStock(stock) : handleAddStock(stock)}
-              className={`px-3 py-1 text-sm rounded transition ${
-                selectedStocks.includes(stock)
-                  ? 'bg-green-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              {stock}
-            </button>
-          ))}
-        </div>
-
-        {selectedStocks.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {selectedStocks.map(stock => (
-              <span
-                key={stock}
-                className="inline-flex items-center gap-1 px-3 py-1 bg-green-900/50 text-green-300 rounded-full text-sm"
-              >
-                {stock}
-                <button onClick={() => handleRemoveStock(stock)} className="hover:text-red-400">×</button>
-              </span>
-            ))}
-          </div>
-        )}
+        <StockSelector
+          selectedStocks={selectedStocks}
+          onSelect={setSelectedStocks}
+          multiple={true}
+          showPrices={true}
+        />
       </div>
 
       {/* Date Range & Threshold */}
