@@ -13,6 +13,7 @@ import IntradayIndicatorView from './components/IntradayIndicatorView'
 import FeatureSelection from './components/FeatureSelection'
 import ModelManager from './components/ModelManager'
 import IHSGDashboard from './components/IHSGDashboard'
+import RuleScreener from './components/RuleScreener'
 
 function App() {
   const [selectedStocks, setSelectedStocks] = useState([])
@@ -104,6 +105,10 @@ function App() {
 
         {activeTab === 'ihsg' && (
           <IHSGDashboard />
+        )}
+
+        {activeTab === 'rule-screener' && (
+          <RuleScreener />
         )}
       </main>
       
