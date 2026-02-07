@@ -281,7 +281,7 @@ export default function RuleScreener() {
   const [showSaveModal, setShowSaveModal] = useState(false)
   const [showFeatureSelector, setShowFeatureSelector] = useState(null) // {ruleId, side: 'left'|'right'}
   const [featureSearch, setFeatureSearch] = useState('')
-  const [showAllResults, setShowAllResults] = useState(false)
+  const [showAllResults, setShowAllResults] = useState(true) // Default: show all stocks
 
   // Load saved presets from localStorage
   useEffect(() => {
@@ -473,23 +473,57 @@ export default function RuleScreener() {
       // Check if target date is today
       const today = new Date().toISOString().split('T')[0]
       const isToday = targetDate === today
+      const isPastDate = targetDate < today
+      
+      // Calculate next trading date (skip weekends)
+      const getNextTradingDay = (dateStr) => {
+        const date = new Date(dateStr)
+        date.setDate(date.getDate() + 1)
+        // Skip Saturday (6) and Sunday (0)
+        while (date.getDay() === 0 || date.getDay() === 6) {
+          date.setDate(date.getDate() + 1)
+        }
+        return date.toISOString().split('T')[0]
+      }
+      
+      // PENTING: Untuk mendapatkan indikator tanggal X, kita harus request tanggal X+1
+      // karena API mengembalikan indikator H-1 untuk prediksi H
+      // Jadi jika user pilih 2 Feb, kita request 3 Feb agar dapat indikator 2 Feb
+      const nextDayForAPI = getNextTradingDay(targetDate)
+      const confirmationDay = getNextTradingDay(nextDayForAPI) // H+2 untuk konfirmasi
+      
+      console.log(`[RuleScreener] User selected: ${targetDate}`)
+      console.log(`[RuleScreener] API call with: ${nextDayForAPI} (to get indicators from ${targetDate})`)
+      console.log(`[RuleScreener] Confirmation day: ${confirmationDay}`)
       
       for (let i = 0; i < stocks.length; i++) {
         const symbol = stocks[i]
         setScannedCount(i + 1)
         
         try {
-          // Fetch live indicator data for each stock
-          // useRealtime = true if screening for today (get latest intraday data)
-          const response = await stockApi.getLiveIndicators(symbol, targetDate, isToday)
+          // Fetch indicator data
+          // Request nextDayForAPI to get indicators from targetDate (H-1 logic)
+          const response = await stockApi.getLiveIndicators(symbol, nextDayForAPI, false)
           
           console.log(`[RuleScreener] ${symbol} response:`, response)
           
-          // API returns data in response.data, not response.indicators
+          // API returns data in response.data
           if (response?.data) {
             const latestData = response.data
             
-            // Evaluate all rules
+            // indicatorDate = tanggal indikator dihitung (should be targetDate)
+            // actualData = harga hari nextDayForAPI (bukan untuk validasi, ini H)
+            // prevClose, prevOpen, dll = harga targetDate (basis)
+            
+            // Harga tanggal yang user pilih (targetDate) ada di prevClose, prevOpen, dll
+            const screeningDayOHLCV = {
+              open: latestData.prevOpen,
+              high: latestData.prevHigh,
+              low: latestData.prevLow,
+              close: latestData.prevClose,
+            }
+            
+            // Evaluate all rules using indicator data
             const ruleResults = rules.map(rule => ({
               rule,
               passed: evaluateRule(rule, latestData),
@@ -504,15 +538,48 @@ export default function RuleScreener() {
               ? ruleResults.every(r => r.passed)
               : ruleResults.some(r => r.passed)
 
-            // Always add to results, but mark if passed
+            // Next day data for confirmation already in actualData!
+            // actualData = harga nextDayForAPI (which is targetDate + 1)
+            let nextDayData = null
+            if (isPastDate && latestData.actualData) {
+              const baseClose = screeningDayOHLCV.close
+              nextDayData = {
+                date: latestData.actualData.date || nextDayForAPI,
+                close: latestData.actualData.close,
+                open: latestData.actualData.open,
+                high: latestData.actualData.high,
+                low: latestData.actualData.low,
+                change: baseClose ? ((latestData.actualData.close - baseClose) / baseClose * 100) : null
+              }
+            }
+
+            // Always add to results
             screeningResults.push({
               symbol,
               data: latestData,
+              ohlcv: screeningDayOHLCV,
               ruleResults,
               passedCount: ruleResults.filter(r => r.passed).length,
               totalRules: rules.length,
               passed,
-              date: response.info?.indicatorDate || targetDate
+              // Tanggal yang dipilih user (tanggal screening/indikator)
+              screeningDate: targetDate,
+              // Tanggal indikator sebenarnya dari API (should match targetDate)
+              indicatorDate: response.info?.indicatorDate || targetDate,
+              // Tanggal harga konfirmasi (H+1)
+              nextDayData,
+              actuallyUp: nextDayData ? nextDayData.change > 0 : null
+            })
+          } else {
+            // No data returned
+            screeningResults.push({
+              symbol,
+              data: null,
+              ruleResults: [],
+              passedCount: 0,
+              totalRules: rules.length,
+              passed: false,
+              error: 'No data available'
             })
           }
         } catch (err) {
@@ -530,8 +597,14 @@ export default function RuleScreener() {
         }
       }
 
-      // Sort all results by passed count
-      screeningResults.sort((a, b) => b.passedCount - a.passedCount)
+      // Sort: passed first (by passedCount desc), then not passed (by passedCount desc)
+      screeningResults.sort((a, b) => {
+        // First sort by passed status
+        if (a.passed !== b.passed) return b.passed ? 1 : -1
+        // Then by passed count
+        return b.passedCount - a.passedCount
+      })
+      
       setAllResults(screeningResults)
       
       // Filter only passed stocks
@@ -957,31 +1030,75 @@ export default function RuleScreener() {
       )}
 
       {/* Results */}
-      {(results.length > 0 || allResults.length > 0) && (
+      {allResults.length > 0 && (
         <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">
-              ✅ Hasil Screening: <span className="text-green-400">{results.length}</span> dari {allResults.length} saham lolos
-              <span className="text-sm text-gray-400 ml-2">({targetDate})</span>
-            </h3>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={showAllResults}
-                onChange={(e) => setShowAllResults(e.target.checked)}
-                className="rounded"
-              />
-              <span className="text-gray-400">Tampilkan semua ({allResults.length})</span>
-            </label>
+          {/* Summary Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 p-4 bg-gray-900/50 rounded-lg">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-white">{allResults.length}</div>
+              <div className="text-xs text-gray-400">Total Saham</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-green-400">{results.length}</div>
+              <div className="text-xs text-gray-400">Lolos Rules</div>
+            </div>
+            {allResults.some(r => r.nextDayData) && (
+              <>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-400">
+                    {results.filter(r => r.actuallyUp).length}/{results.length}
+                  </div>
+                  <div className="text-xs text-gray-400">Lolos & Naik Besok</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-yellow-400">
+                    {results.length > 0 ? ((results.filter(r => r.actuallyUp).length / results.length) * 100).toFixed(0) : 0}%
+                  </div>
+                  <div className="text-xs text-gray-400">Akurasi Rules</div>
+                </div>
+              </>
+            )}
           </div>
 
-          {results.length === 0 && !showAllResults && (
-            <div className="text-center py-8 text-gray-500">
-              <FiAlertTriangle className="w-12 h-12 mx-auto mb-2 opacity-50" />
-              <p>Tidak ada saham yang lolos semua rule.</p>
-              <p className="text-sm mt-1">Coba ubah rule atau gunakan logika OR.</p>
+          {/* Info Box explaining dates */}
+          <div className="mb-4 p-3 bg-blue-900/20 rounded-lg border border-blue-500/30">
+            <h4 className="text-sm font-semibold text-blue-400 mb-2">📅 Keterangan Tanggal:</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+              <div className="flex items-start gap-2 p-2 bg-yellow-900/30 rounded">
+                <span className="text-yellow-400 font-semibold whitespace-nowrap">📊 Tanggal Screening:</span>
+                <span className="text-gray-300">
+                  <strong className="text-yellow-300">{targetDate}</strong> — 
+                  Indikator (RSI, MACD, dll) & harga close dari tanggal ini
+                </span>
+              </div>
+              {allResults.some(r => r.nextDayData) && (
+                <div className="flex items-start gap-2 p-2 bg-green-900/30 rounded">
+                  <span className="text-green-400 font-semibold whitespace-nowrap">📈 Tanggal Konfirmasi:</span>
+                  <span className="text-gray-300">
+                    <strong className="text-green-300">{allResults.find(r => r.nextDayData)?.nextDayData?.date || '?'}</strong> — 
+                    Harga besok untuk validasi apakah rule berhasil
+                  </span>
+                </div>
+              )}
             </div>
-          )}
+          </div>
+
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-white">
+              📊 Hasil Screening
+            </h3>
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={showAllResults}
+                  onChange={(e) => setShowAllResults(e.target.checked)}
+                  className="rounded"
+                />
+                <span className="text-gray-400">Tampilkan semua</span>
+              </label>
+            </div>
+          </div>
 
           <div className="space-y-2">
             {(showAllResults ? allResults : results).map((result) => (
@@ -997,23 +1114,33 @@ export default function RuleScreener() {
                   onClick={() => setExpandedStock(expandedStock === result.symbol ? null : result.symbol)}
                   className="w-full flex items-center justify-between p-4 hover:bg-gray-700/50 transition-colors"
                 >
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-3 flex-wrap">
                     {result.passed ? (
                       <FiCheck className="w-5 h-5 text-green-400" />
                     ) : (
                       <FiX className="w-5 h-5 text-red-400" />
                     )}
                     <span className="text-xl font-bold text-white">{result.symbol}</span>
-                    <span className={result.passed ? 'text-green-400' : 'text-gray-400'}>
+                    <span className={`px-2 py-0.5 rounded text-sm ${result.passed ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>
                       {result.passedCount}/{result.totalRules} rules
                     </span>
-                    {result.data?.close && (
-                      <span className="text-gray-400">
-                        Rp {result.data.close.toLocaleString('id-ID')}
+                    {(result.ohlcv?.close || result.data?.prevClose) && (
+                      <span className="text-yellow-400 text-sm" title={`Close tanggal ${result.date || targetDate}`}>
+                        📊 Rp {(result.ohlcv?.close || result.data?.prevClose)?.toLocaleString('id-ID')}
+                      </span>
+                    )}
+                    {/* Next day confirmation */}
+                    {result.nextDayData && (
+                      <span className={`px-2 py-0.5 rounded text-sm ${
+                        result.nextDayData.change > 0 
+                          ? 'bg-green-500/20 text-green-400' 
+                          : 'bg-red-500/20 text-red-400'
+                      }`} title={`Perubahan ke tanggal ${result.nextDayData.date}`}>
+                        📈 {result.nextDayData.change > 0 ? '+' : ''}{result.nextDayData.change?.toFixed(2)}%
                       </span>
                     )}
                     {result.error && (
-                      <span className="text-red-400 text-sm">Error: {result.error}</span>
+                      <span className="text-red-400 text-sm">⚠️ {result.error}</span>
                     )}
                   </div>
                   {expandedStock === result.symbol ? (
@@ -1024,48 +1151,134 @@ export default function RuleScreener() {
                 </button>
 
                 {expandedStock === result.symbol && result.data && (
-                  <div className="px-4 pb-4 border-t border-gray-600 mt-2 pt-4">
+                  <div className="px-4 pb-4 border-t border-gray-600 mt-2 pt-4 space-y-4">
+                    {/* Info Box - Data Tanggal Screening */}
+                    {result.ohlcv && (
+                    <div className="p-3 rounded-lg bg-yellow-900/20 border border-yellow-500/30">
+                      <h4 className="text-sm font-semibold text-yellow-400 mb-2">
+                        📊 Data Tanggal Screening ({result.screeningDate || targetDate})
+                      </h4>
+                      <p className="text-xs text-gray-400 mb-2">
+                        Indikator teknikal & harga dari tanggal yang Anda pilih. Close adalah <strong>basis perbandingan</strong> untuk konfirmasi.
+                      </p>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mt-2 pt-2 border-t border-yellow-500/20">
+                        <div>
+                          <div className="text-gray-400 text-xs">Open</div>
+                          <div className="text-white">Rp {result.ohlcv.open?.toLocaleString('id-ID') || '-'}</div>
+                        </div>
+                        <div>
+                          <div className="text-gray-400 text-xs">High</div>
+                          <div className="text-white">Rp {result.ohlcv.high?.toLocaleString('id-ID') || '-'}</div>
+                        </div>
+                        <div>
+                          <div className="text-gray-400 text-xs">Low</div>
+                          <div className="text-white">Rp {result.ohlcv.low?.toLocaleString('id-ID') || '-'}</div>
+                        </div>
+                        <div>
+                          <div className="text-gray-400 text-xs">Close (Basis)</div>
+                          <div className="text-yellow-400 font-semibold">Rp {result.ohlcv.close?.toLocaleString('id-ID') || '-'}</div>
+                        </div>
+                      </div>
+                    </div>
+                    )}
+
+                    {/* Next Day Confirmation Box */}
+                    {result.nextDayData && (
+                      <div className={`p-3 rounded-lg ${
+                        result.nextDayData.change > 0 
+                          ? 'bg-green-900/30 border border-green-500/30' 
+                          : 'bg-red-900/30 border border-red-500/30'
+                      }`}>
+                        <h4 className="text-sm font-semibold text-green-400 mb-2">
+                          📈 Harga Konfirmasi (H+1: {result.nextDayData.date})
+                        </h4>
+                        <p className="text-xs text-gray-400 mb-2">
+                          Harga hari berikutnya setelah tanggal target.
+                          Perubahan dihitung dari Close H ({result.ohlcv?.close?.toLocaleString('id-ID') || 'N/A'}) ke Close H+1.
+                        </p>
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+                          <div>
+                            <div className="text-gray-400 text-xs">Open</div>
+                            <div className="text-white">Rp {result.nextDayData.open?.toLocaleString('id-ID')}</div>
+                          </div>
+                          <div>
+                            <div className="text-gray-400 text-xs">High</div>
+                            <div className="text-white">Rp {result.nextDayData.high?.toLocaleString('id-ID')}</div>
+                          </div>
+                          <div>
+                            <div className="text-gray-400 text-xs">Low</div>
+                            <div className="text-white">Rp {result.nextDayData.low?.toLocaleString('id-ID')}</div>
+                          </div>
+                          <div>
+                            <div className="text-gray-400 text-xs">Close</div>
+                            <div className="text-white">Rp {result.nextDayData.close?.toLocaleString('id-ID')}</div>
+                          </div>
+                          <div>
+                            <div className="text-gray-400 text-xs">Perubahan dari Basis</div>
+                            <div className={result.nextDayData.change > 0 ? 'text-green-400 font-bold' : 'text-red-400 font-bold'}>
+                              {result.nextDayData.change > 0 ? '+' : ''}{result.nextDayData.change?.toFixed(2)}%
+                            </div>
+                          </div>
+                        </div>
+                        <div className={`mt-3 p-2 rounded text-sm font-semibold ${
+                          result.nextDayData.change > 0 ? 'bg-green-900/50 text-green-400' : 'bg-red-900/50 text-red-400'
+                        }`}>
+                          {result.passed 
+                            ? (result.nextDayData.change > 0 
+                                ? '✅ RULE BENAR - Saham lolos screening & naik di hari berikutnya!' 
+                                : '❌ RULE SALAH - Saham lolos screening tapi turun di hari berikutnya')
+                            : (result.nextDayData.change > 0 
+                                ? '⚠️ Saham tidak lolos tapi ternyata naik' 
+                                : '✅ Saham tidak lolos dan memang turun')}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Rule evaluation details */}
-                    <h4 className="text-sm font-semibold text-gray-400 mb-2">📋 Detail Rule Evaluation</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4">
-                      {result.ruleResults.map((rr, i) => (
-                        <div
-                          key={i}
-                          className={`flex items-center justify-between p-2 rounded ${
-                            rr.passed ? 'bg-green-900/30' : 'bg-red-900/30'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            {rr.passed ? <FiCheck className="w-4 h-4 text-green-400" /> : <FiX className="w-4 h-4 text-red-400" />}
-                            <span className={`text-sm ${rr.passed ? 'text-green-400' : 'text-red-400'}`}>
-                              {ALL_FEATURES[rr.rule.leftFeature]?.label} {rr.rule.operator}{' '}
-                              {rr.rule.compareType === 'constant' 
-                                ? rr.rule.rightValue 
-                                : ALL_FEATURES[rr.rule.rightFeature]?.label}
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-400 mb-2">📋 Detail Rule Evaluation</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {result.ruleResults.map((rr, i) => (
+                          <div
+                            key={i}
+                            className={`flex items-center justify-between p-2 rounded ${
+                              rr.passed ? 'bg-green-900/30' : 'bg-red-900/30'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              {rr.passed ? <FiCheck className="w-4 h-4 text-green-400" /> : <FiX className="w-4 h-4 text-red-400" />}
+                              <span className={`text-sm ${rr.passed ? 'text-green-400' : 'text-red-400'}`}>
+                                {ALL_FEATURES[rr.rule.leftFeature]?.label} {rr.rule.operator}{' '}
+                                {rr.rule.compareType === 'constant' 
+                                  ? rr.rule.rightValue 
+                                  : ALL_FEATURES[rr.rule.rightFeature]?.label}
+                              </span>
+                            </div>
+                            <span className="text-xs text-gray-400">
+                              ({typeof rr.leftValue === 'number' ? rr.leftValue.toFixed(2) : rr.leftValue ?? 'N/A'} vs {typeof rr.rightValue === 'number' ? rr.rightValue.toFixed(2) : rr.rightValue ?? 'N/A'})
                             </span>
                           </div>
-                          <span className="text-xs text-gray-400">
-                            ({typeof rr.leftValue === 'number' ? rr.leftValue.toFixed(2) : rr.leftValue} vs {typeof rr.rightValue === 'number' ? rr.rightValue.toFixed(2) : rr.rightValue})
-                          </span>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
 
                     {/* Key indicators */}
-                    <h4 className="text-sm font-semibold text-gray-400 mb-2">📊 Key Indicators</h4>
-                    <div className="grid grid-cols-3 md:grid-cols-6 gap-2 text-sm">
-                      {['rsi', 'adx', 'macdHistogram', 'volumeRatio', 'closePosition', 'roc'].map((key) => (
-                        <div key={key} className="bg-gray-800 rounded p-2">
-                          <div className="text-gray-500 text-xs">{ALL_FEATURES[key]?.label || key}</div>
-                          <div className="text-white font-medium">
-                            {result.data[key] !== undefined && result.data[key] !== null
-                              ? typeof result.data[key] === 'number'
-                                ? result.data[key].toFixed(2)
-                                : result.data[key]
-                              : 'N/A'}
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-400 mb-2">📊 Key Indicators</h4>
+                      <div className="grid grid-cols-3 md:grid-cols-6 gap-2 text-sm">
+                        {['rsi', 'adx', 'macdHistogram', 'volumeRatio', 'closePosition', 'roc'].map((key) => (
+                          <div key={key} className="bg-gray-800 rounded p-2">
+                            <div className="text-gray-500 text-xs">{ALL_FEATURES[key]?.label || key}</div>
+                            <div className="text-white font-medium">
+                              {result.data[key] !== undefined && result.data[key] !== null
+                                ? typeof result.data[key] === 'number'
+                                  ? result.data[key].toFixed(2)
+                                  : result.data[key]
+                                : 'N/A'}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}
