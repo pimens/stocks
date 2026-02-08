@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { FiActivity, FiRefreshCw, FiCalendar, FiCpu, FiSave, FiTrash2, FiFolder, FiCheck, FiX, FiSearch, FiPlus, FiEdit2 } from 'react-icons/fi'
+import { FiActivity, FiRefreshCw, FiCalendar, FiCpu, FiSave, FiTrash2, FiFolder, FiCheck, FiX, FiSearch, FiPlus, FiEdit2, FiCode, FiChevronDown, FiChevronUp } from 'react-icons/fi'
 import { stockApi, aiApi } from '../services/api'
 import { toast } from 'react-toastify'
 import ReactMarkdown from 'react-markdown'
@@ -153,6 +153,7 @@ function IndicatorAnalysis() {
   const [indicatorAIAnalysis, setIndicatorAIAnalysis] = useState(null)
   const [analyzingIndicators, setAnalyzingIndicators] = useState(false)
   const [selectedModel, setSelectedModel] = useState('google/gemini-2.0-flash-001')
+  const [showPrompt, setShowPrompt] = useState(false)
   
   // Presets
   const [presets, setPresets] = useState([])
@@ -868,6 +869,33 @@ const aiModels = [
               <div className="mt-3 text-xs text-gray-500 border-t border-gray-700 pt-2">
                 Model: {indicatorAIAnalysis.model} | Tokens: {indicatorAIAnalysis.usage?.total_tokens}
               </div>
+              
+              {/* Prompt Display Toggle */}
+              {indicatorAIAnalysis.prompt && (
+                <div className="mt-3 border-t border-gray-700 pt-3">
+                  <button
+                    onClick={() => setShowPrompt(!showPrompt)}
+                    className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300"
+                  >
+                    <FiCode className="w-4 h-4" />
+                    <span>Lihat Prompt yang Dikirim</span>
+                    {showPrompt ? <FiChevronUp className="w-4 h-4" /> : <FiChevronDown className="w-4 h-4" />}
+                  </button>
+                  
+                  {showPrompt && (
+                    <div className="mt-3 space-y-3">
+                      <div className="bg-gray-900/70 rounded-lg p-3 border border-gray-700">
+                        <div className="text-xs font-semibold text-purple-400 mb-2">📋 System Prompt:</div>
+                        <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono overflow-x-auto">{indicatorAIAnalysis.prompt.system}</pre>
+                      </div>
+                      <div className="bg-gray-900/70 rounded-lg p-3 border border-gray-700">
+                        <div className="text-xs font-semibold text-green-400 mb-2">👤 User Prompt:</div>
+                        <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono overflow-x-auto max-h-64 overflow-y-auto">{indicatorAIAnalysis.prompt.user}</pre>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

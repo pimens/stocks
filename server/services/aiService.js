@@ -125,13 +125,15 @@ Berikan analisis yang mencakup:
 
 Format jawaban dalam Markdown yang rapi.`;
 
+    const systemPrompt = 'Kamu adalah analis saham profesional yang berpengalaman di pasar saham Indonesia (IDX). Berikan analisis yang objektif, berbasis data, dan mudah dipahami. Selalu ingatkan bahwa analisis ini bukan ajakan untuk membeli/menjual dan investor harus melakukan riset sendiri.';
+
     try {
       const response = await axios.post(this.openRouterUrl, {
         model: selectedModel,
         messages: [
           {
             role: 'system',
-            content: 'Kamu adalah analis saham profesional yang berpengalaman di pasar saham Indonesia (IDX). Berikan analisis yang objektif, berbasis data, dan mudah dipahami. Selalu ingatkan bahwa analisis ini bukan ajakan untuk membeli/menjual dan investor harus melakukan riset sendiri.'
+            content: systemPrompt
           },
           {
             role: 'user',
@@ -152,7 +154,11 @@ Format jawaban dalam Markdown yang rapi.`;
       return {
         analysis: response.data.choices[0].message.content,
         model: response.data.model,
-        usage: response.data.usage
+        usage: response.data.usage,
+        prompt: {
+          system: systemPrompt,
+          user: prompt
+        }
       };
     } catch (error) {
       console.error('AI Analysis Error:', error.response?.data || error.message);
@@ -184,13 +190,15 @@ Berikan:
 2. Ranking berdasarkan potensi (dengan alasan)
 3. Rekomendasi alokasi jika ingin diversifikasi`;
 
+    const systemPrompt = 'Kamu adalah analis saham profesional Indonesia. Berikan perbandingan yang objektif dan berbasis data.';
+
     try {
       const response = await axios.post(this.openRouterUrl, {
         model: selectedModel,
         messages: [
           {
             role: 'system',
-            content: 'Kamu adalah analis saham profesional Indonesia. Berikan perbandingan yang objektif dan berbasis data.'
+            content: systemPrompt
           },
           {
             role: 'user',
@@ -210,7 +218,11 @@ Berikan:
 
       return {
         comparison: response.data.choices[0].message.content,
-        model: response.data.model
+        model: response.data.model,
+        prompt: {
+          system: systemPrompt,
+          user: prompt
+        }
       };
     } catch (error) {
       console.error('AI Comparison Error:', error.response?.data || error.message);
@@ -289,13 +301,15 @@ Berikan analisis yang meliputi:
 
 Berikan analisis yang berbasis data dan objektif. Gunakan emoji untuk memudahkan pembacaan.`;
 
+    const systemPrompt = 'Kamu adalah analis saham profesional Indonesia yang ahli dalam analisis teknikal. Berikan analisis mendalam berdasarkan indikator teknikal yang diberikan. Gunakan bahasa Indonesia yang jelas dan mudah dipahami.';
+
     try {
       const response = await axios.post(this.openRouterUrl, {
         model: selectedModel,
         messages: [
           {
             role: 'system',
-            content: 'Kamu adalah analis saham profesional Indonesia yang ahli dalam analisis teknikal. Berikan analisis mendalam berdasarkan indikator teknikal yang diberikan. Gunakan bahasa Indonesia yang jelas dan mudah dipahami.'
+            content: systemPrompt
           },
           {
             role: 'user',
@@ -318,7 +332,11 @@ Berikan analisis yang berbasis data dan objektif. Gunakan emoji untuk memudahkan
         model: response.data.model,
         usage: response.data.usage,
         date,
-        indicatorCount: Object.keys(indicators).length
+        indicatorCount: Object.keys(indicators).length,
+        prompt: {
+          system: systemPrompt,
+          user: prompt
+        }
       };
     } catch (error) {
       console.error('AI Indicator Analysis Error:', error.response?.data || error.message);

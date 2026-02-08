@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { FiCpu, FiRefreshCw, FiTrendingUp, FiSettings } from 'react-icons/fi'
+import { FiCpu, FiRefreshCw, FiTrendingUp, FiSettings, FiCode, FiChevronDown, FiChevronUp } from 'react-icons/fi'
 import { aiApi } from '../services/api'
 import { toast } from 'react-toastify'
 import ReactMarkdown from 'react-markdown'
@@ -12,6 +12,8 @@ function AIAnalysis({ selectedStocks, stockData }) {
   const [availableModels, setAvailableModels] = useState([])
   const [selectedModel, setSelectedModel] = useState('google/gemini-2.0-flash-001')
   const [showModelSelector, setShowModelSelector] = useState(false)
+  const [showAnalysisPrompt, setShowAnalysisPrompt] = useState(false)
+  const [showComparisonPrompt, setShowComparisonPrompt] = useState(false)
 
   useEffect(() => {
     loadAvailableModels()
@@ -242,6 +244,33 @@ function AIAnalysis({ selectedStocks, stockData }) {
             Model: {analysis.aiAnalysis.model} | 
             Tokens: {analysis.aiAnalysis.usage?.total_tokens}
           </div>
+          
+          {/* Prompt Display Toggle */}
+          {analysis.aiAnalysis.prompt && (
+            <div className="mt-4 border-t border-gray-700 pt-4">
+              <button
+                onClick={() => setShowAnalysisPrompt(!showAnalysisPrompt)}
+                className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300"
+              >
+                <FiCode className="w-4 h-4" />
+                <span>Lihat Prompt yang Dikirim</span>
+                {showAnalysisPrompt ? <FiChevronUp className="w-4 h-4" /> : <FiChevronDown className="w-4 h-4" />}
+              </button>
+              
+              {showAnalysisPrompt && (
+                <div className="mt-3 space-y-3">
+                  <div className="bg-gray-900/70 rounded-lg p-3 border border-gray-700">
+                    <div className="text-xs font-semibold text-purple-400 mb-2">📋 System Prompt:</div>
+                    <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono overflow-x-auto">{analysis.aiAnalysis.prompt.system}</pre>
+                  </div>
+                  <div className="bg-gray-900/70 rounded-lg p-3 border border-gray-700">
+                    <div className="text-xs font-semibold text-green-400 mb-2">👤 User Prompt:</div>
+                    <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono overflow-x-auto max-h-96 overflow-y-auto">{analysis.aiAnalysis.prompt.user}</pre>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -258,6 +287,33 @@ function AIAnalysis({ selectedStocks, stockData }) {
           <div className="mt-4 pt-4 border-t border-gray-700 text-xs text-gray-500">
             Model: {comparisonResult.comparison.model}
           </div>
+          
+          {/* Comparison Prompt Display Toggle */}
+          {comparisonResult.comparison.prompt && (
+            <div className="mt-4 border-t border-gray-700 pt-4">
+              <button
+                onClick={() => setShowComparisonPrompt(!showComparisonPrompt)}
+                className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300"
+              >
+                <FiCode className="w-4 h-4" />
+                <span>Lihat Prompt yang Dikirim</span>
+                {showComparisonPrompt ? <FiChevronUp className="w-4 h-4" /> : <FiChevronDown className="w-4 h-4" />}
+              </button>
+              
+              {showComparisonPrompt && (
+                <div className="mt-3 space-y-3">
+                  <div className="bg-gray-900/70 rounded-lg p-3 border border-gray-700">
+                    <div className="text-xs font-semibold text-purple-400 mb-2">📋 System Prompt:</div>
+                    <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono overflow-x-auto">{comparisonResult.comparison.prompt.system}</pre>
+                  </div>
+                  <div className="bg-gray-900/70 rounded-lg p-3 border border-gray-700">
+                    <div className="text-xs font-semibold text-green-400 mb-2">👤 User Prompt:</div>
+                    <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono overflow-x-auto max-h-96 overflow-y-auto">{comparisonResult.comparison.prompt.user}</pre>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
