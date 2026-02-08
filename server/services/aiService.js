@@ -217,6 +217,114 @@ Berikan:
       throw new Error(error.response?.data?.error?.message || 'Failed to compare stocks');
     }
   }
+
+  // Analyze stock with custom indicators
+  async analyzeWithIndicators(symbol, indicators, date, selectedModel = 'google/gemini-2.0-flash-001') {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    
+    if (!apiKey || apiKey === 'your_openrouter_api_key_here') {
+      throw new Error('OpenRouter API key not configured');
+    }
+
+    // Format indicators for prompt
+    const indicatorList = Object.entries(indicators)
+      .map(([key, value]) => {
+        if (value === null || value === undefined) return null;
+        if (typeof value === 'boolean') return `- ${key}: ${value ? 'Ya' : 'Tidak'}`;
+        if (typeof value === 'number') {
+          if (Math.abs(value) > 1000) return `- ${key}: ${value.toLocaleString('id-ID')}`;
+          return `- ${key}: ${value.toFixed(4)}`;
+        }
+        return `- ${key}: ${value}`;
+      })
+      .filter(Boolean)
+      .join('\n');
+
+    const prompt = `Kamu adalah seorang analis saham profesional Indonesia dengan keahlian dalam analisis teknikal. Analisis data indikator teknikal berikut dan berikan insight mendalam.
+
+**Saham: ${symbol}**
+**Tanggal Data: ${date}**
+**Jumlah Indikator: ${Object.keys(indicators).length}**
+
+**Data Indikator Teknikal:**
+${indicatorList}
+
+---
+
+Berikan analisis yang meliputi:
+
+1. **📊 Ringkasan Kondisi Teknikal**
+   - Kondisi tren saat ini (bullish/bearish/sideways)
+   - Kekuatan tren berdasarkan ADX jika tersedia
+
+2. **💪 Analisis Momentum**
+   - Kondisi RSI (oversold/overbought/netral)
+   - Kondisi Stochastic
+   - Momentum umum pasar
+
+3. **📈 Analisis Moving Average**
+   - Posisi harga terhadap MA
+   - Golden/Death cross jika terdeteksi
+   - Tren jangka pendek vs panjang
+
+4. **📉 Level Support & Resistance**
+   - Area support dari Bollinger Bands
+   - Area resistance
+   - Tingkat volatilitas (ATR)
+
+5. **🔮 Prediksi Arah**
+   - Kemungkinan pergerakan berikutnya
+   - Level target jika naik
+   - Level stop loss yang disarankan
+
+6. **⚠️ Risk Assessment**
+   - Faktor risiko yang perlu diperhatikan
+   - Sinyal divergensi jika ada
+   - Volume dan partisipasi pasar
+
+7. **✅ Rekomendasi**
+   - Aksi yang disarankan (Buy/Sell/Hold)
+   - Tingkat keyakinan (High/Medium/Low)
+   - Timing entry yang ideal
+
+Berikan analisis yang berbasis data dan objektif. Gunakan emoji untuk memudahkan pembacaan.`;
+
+    try {
+      const response = await axios.post(this.openRouterUrl, {
+        model: selectedModel,
+        messages: [
+          {
+            role: 'system',
+            content: 'Kamu adalah analis saham profesional Indonesia yang ahli dalam analisis teknikal. Berikan analisis mendalam berdasarkan indikator teknikal yang diberikan. Gunakan bahasa Indonesia yang jelas dan mudah dipahami.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 2500
+      }, {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'http://localhost:3000',
+          'X-Title': 'Stock Screener Indonesia - Indicator Analysis'
+        }
+      });
+
+      return {
+        analysis: response.data.choices[0].message.content,
+        model: response.data.model,
+        usage: response.data.usage,
+        date,
+        indicatorCount: Object.keys(indicators).length
+      };
+    } catch (error) {
+      console.error('AI Indicator Analysis Error:', error.response?.data || error.message);
+      throw new Error(error.response?.data?.error?.message || 'Failed to analyze indicators');
+    }
+  }
 }
 
 module.exports = new AIService();

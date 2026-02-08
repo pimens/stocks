@@ -111,4 +111,27 @@ router.post('/custom', async (req, res) => {
   }
 });
 
+// Analyze stock with custom indicators
+router.post('/analyze-indicators', async (req, res) => {
+  try {
+    const { symbol, indicators, date, model = 'google/gemini-2.0-flash-001' } = req.body;
+    
+    if (!symbol || !indicators) {
+      return res.status(400).json({ error: 'Please provide symbol and indicators' });
+    }
+    
+    // Get AI analysis with custom indicators
+    const aiAnalysis = await aiService.analyzeWithIndicators(symbol, indicators, date, model);
+    
+    res.json({
+      symbol,
+      date,
+      indicatorCount: Object.keys(indicators).length,
+      aiAnalysis
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;

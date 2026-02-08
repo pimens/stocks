@@ -109,5 +109,16 @@ export const aiApi = {
   compareStocks: async (symbols, model = 'google/gemini-2.0-flash-001') => {
     const response = await axios.post(`${API_BASE}/ai/compare`, { symbols, model })
     return response.data
+  },
+
+  // Analyze stock with custom indicators
+  analyzeWithIndicators: async (symbol, indicators, date, model = 'google/gemini-2.0-flash-001') => {
+    const response = await axios.post(`${API_BASE}/ai/analyze-indicators`, {
+      symbol,
+      indicators,
+      date,
+      model
+    })
+    return response.data
   }
 }
