@@ -94,9 +94,14 @@ module.exports = async (req, res) => {
         console.error('Error fetching price history:', err.message);
       }
       
-      const analysis = await aiService.analyzeWithIndicators(symbol, indicators, date, model, priceHistory);
+      const aiAnalysis = await aiService.analyzeWithIndicators(symbol, indicators, date, model, priceHistory);
       
-      return res.json(analysis);
+      return res.json({
+        symbol,
+        date,
+        indicatorCount: Object.keys(indicators).length,
+        aiAnalysis
+      });
     }
 
     // Not found
