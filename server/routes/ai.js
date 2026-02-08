@@ -120,8 +120,17 @@ router.post('/analyze-indicators', async (req, res) => {
       return res.status(400).json({ error: 'Please provide symbol and indicators' });
     }
     
-    // Get AI analysis with custom indicators
-    const aiAnalysis = await aiService.analyzeWithIndicators(symbol, indicators, date, model);
+    // Fetch price history for the stock (last 15 days)
+    let priceHistory = [];
+    try {
+      const stockData = await stockService.getStockData(symbol, '1mo', '1d');
+      priceHistory = stockData.prices.slice(-15);
+    } catch (err) {
+      console.error('Error fetching price history:', err.message);
+    }
+    
+    // Get AI analysis with custom indicators and price history
+    const aiAnalysis = await aiService.analyzeWithIndicators(symbol, indicators, date, model, priceHistory);
     
     res.json({
       symbol,

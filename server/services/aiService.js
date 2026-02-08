@@ -231,7 +231,7 @@ Berikan:
   }
 
   // Analyze stock with custom indicators
-  async analyzeWithIndicators(symbol, indicators, date, selectedModel = 'google/gemini-2.0-flash-001') {
+  async analyzeWithIndicators(symbol, indicators, date, selectedModel = 'google/gemini-2.0-flash-001', priceHistory = []) {
     const apiKey = process.env.OPENROUTER_API_KEY;
     
     if (!apiKey || apiKey === 'your_openrouter_api_key_here') {
@@ -252,6 +252,15 @@ Berikan:
       .filter(Boolean)
       .join('\n');
 
+    // Format price history for prompt
+    let priceHistorySection = '';
+    if (priceHistory && priceHistory.length > 0) {
+      const priceLines = priceHistory.map(p => 
+        `${p.date}: Open ${p.open?.toFixed(0)}, High ${p.high?.toFixed(0)}, Low ${p.low?.toFixed(0)}, Close ${p.close?.toFixed(0)}, Vol ${(p.volume/1000000).toFixed(2)}M`
+      ).join('\n');
+      priceHistorySection = `\n\n**📅 Harga 15 Hari Terakhir:**\n${priceLines}`;
+    }
+
     const prompt = `Kamu adalah seorang analis saham profesional Indonesia dengan keahlian dalam analisis teknikal. Analisis data indikator teknikal berikut dan berikan insight mendalam.
 
 **Saham: ${symbol}**
@@ -259,7 +268,7 @@ Berikan:
 **Jumlah Indikator: ${Object.keys(indicators).length}**
 
 **Data Indikator Teknikal:**
-${indicatorList}
+${indicatorList}${priceHistorySection}
 
 ---
 
