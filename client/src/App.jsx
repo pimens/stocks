@@ -14,6 +14,7 @@ import FeatureSelection from './components/FeatureSelection'
 import ModelManager from './components/ModelManager'
 import IHSGDashboard from './components/IHSGDashboard'
 import RuleScreener from './components/RuleScreener'
+import IndicatorAnalysis from './components/IndicatorAnalysis'
 
 function App() {
   const [selectedStocks, setSelectedStocks] = useState([])
@@ -109,6 +110,10 @@ function App() {
 
         {activeTab === 'rule-screener' && (
           <RuleScreener />
+        )}
+
+        {activeTab === 'indicator-analysis' && (
+          <IndicatorAnalysis />
         )}
       </main>
       

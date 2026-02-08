@@ -5,6 +5,7 @@ function Header({ activeTab, setActiveTab }) {
     { id: 'screener', label: 'Screener', icon: FiBarChart2 },
     { id: 'detail', label: 'Detail', icon: FiTrendingUp },
     { id: 'ai', label: 'AI', icon: FiCpu },
+    { id: 'indicator-analysis', label: '90+ Indikator', icon: FiActivity },
     { id: 'regression', label: 'ML Train', icon: FiDatabase },
     { id: 'feature-selection', label: 'Feature Select', icon: FiTarget },
     { id: 'model-manager', label: 'Models', icon: FiPackage },
