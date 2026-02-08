@@ -77,6 +77,28 @@ module.exports = async (req, res) => {
       return res.json({ stocks: stocksData, comparison });
     }
 
+    // POST /api/ai/analyze-indicators
+    if (action === 'analyze-indicators' && req.method === 'POST') {
+      const { symbol, indicators, date, model = 'google/gemini-2.0-flash-001' } = req.body;
+      
+      if (!symbol || !indicators) {
+        return res.status(400).json({ error: 'Symbol and indicators are required' });
+      }
+
+      // Fetch price history for context
+      let priceHistory = [];
+      try {
+        const stockData = await stockService.getStockData(symbol, '1mo', '1d');
+        priceHistory = stockData.prices.slice(-15);
+      } catch (err) {
+        console.error('Error fetching price history:', err.message);
+      }
+      
+      const analysis = await aiService.analyzeWithIndicators(symbol, indicators, date, model, priceHistory);
+      
+      return res.json(analysis);
+    }
+
     // Not found
     return res.status(404).json({ error: 'Endpoint not found' });
   } catch (error) {
