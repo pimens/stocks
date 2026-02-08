@@ -407,14 +407,27 @@ function IndicatorAnalysis() {
   }, [indicatorSearch])
 
   // AI Models
-  const aiModels = [
+const aiModels = [
     { id: 'google/gemini-2.0-flash-001', name: 'Gemini 2.0 Flash' },
     { id: 'google/gemini-2.5-pro-preview-03-25', name: 'Gemini 2.5 Pro' },
     { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet' },
     { id: 'openai/gpt-4o', name: 'GPT-4o' },
     { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini' },
     { id: 'deepseek/deepseek-chat', name: 'DeepSeek Chat' },
-  ]
+    { id: 'deepseek/deepseek-r1-0528:free', name: 'DeepSeek R1 0528 (free)' },
+    { id: 'arcee-ai/trinity-large-preview:free', name: 'Arcee Trinity Large (free)' },
+    { id: 'tngtech/deepseek-r1t2-chimera:free', name: 'TNG DeepSeek R1T2 Chimera (free)' },
+    { id: 'stepfun/step-3.5-flash:free', name: 'StepFun Step 3.5 Flash (free)' },
+    { id: 'z-ai/glm-4.5-air:free', name: 'Z.AI GLM 4.5 Air (free)' },
+    { id: 'qwen/qwen3-coder-480b-a35b:free', name: 'Qwen3 Coder 480B (free)' },
+    { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'Llama 3.3 70B (free)' },
+    { id: 'google/gemma-3-27b-it:free', name: 'Google Gemma 3 27B (free)' },
+    { id: 'mistralai/mistral-small-3.1-24b-instruct:free', name: 'Mistral Small 3.1 24B (free)' },
+    { id: 'qwen/qwen3-4b:free', name: 'Qwen3 4B (free)' },
+    { id: 'meta-llama/llama-3.2-3b-instruct:free', name: 'Llama 3.2 3B (free)' },
+    { id: 'google/gemma-3-12b-it:free', name: 'Google Gemma 3 12B (free)' },
+    { id: 'google/gemma-3-4b-it:free', name: 'Google Gemma 3 4B (free)' },
+]
 
   return (
     <div className="space-y-6">
