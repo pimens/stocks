@@ -16,19 +16,19 @@ const INDICATOR_CATEGORIES = {
   },
   'Moving Average': {
     icon: '📈',
-    indicators: ['sma5', 'sma10', 'sma20', 'sma50', 'ema5', 'ema10', 'ema12', 'ema26']
+    indicators: ['sma5', 'sma10', 'sma20', 'sma50', 'ema5', 'ema10', 'ema12', 'ema26', 'ema21', 'ema21High', 'ema21Low']
   },
   'Price vs MA': {
     icon: '⚖️',
-    indicators: ['priceAboveSMA5', 'priceAboveSMA10', 'priceAboveSMA20', 'priceAboveSMA50', 'priceAboveEMA12', 'priceAboveEMA26']
+    indicators: ['priceAboveSMA5', 'priceAboveSMA10', 'priceAboveSMA20', 'priceAboveSMA50', 'priceAboveEMA12', 'priceAboveEMA26', 'priceAboveEMA21', 'priceAboveEMA21High', 'priceBelowEMA21Low']
   },
   'Distance from MA': {
     icon: '📏',
-    indicators: ['distFromSMA5', 'distFromSMA20', 'distFromSMA50']
+    indicators: ['distFromSMA5', 'distFromSMA20', 'distFromSMA50', 'distFromEMA21', 'distFromEMA21High', 'distFromEMA21Low']
   },
   'MA Crossover': {
     icon: '✂️',
-    indicators: ['sma5AboveSMA10', 'sma10AboveSMA20', 'sma20AboveSMA50']
+    indicators: ['sma5AboveSMA10', 'sma10AboveSMA20', 'sma20AboveSMA50', 'priceCrossAboveEMA21', 'priceCrossBelowEMA21']
   },
   'RSI': {
     icon: '💪',
