@@ -36,7 +36,7 @@ const FEATURE_CATEGORIES = {
   },
   'MACD': {
     icon: '📊',
-    features: ['macd', 'macdSignal', 'macdHistogram', 'macdBullish', 'macdPositive', 'macdGoldenCross', 'macdDeathCross', 'deltaMACDHist']
+    features: ['macd', 'macdSignal', 'macdHistogram', 'macdBullish', 'macdPositive', 'macdGoldenCross', 'macdDeathCross', 'macdNearGoldenCross', 'macdHistogramConverging', 'macdHistogramRising', 'macdDistanceToSignal', 'deltaMACDHist']
   },
   'Bollinger Bands': {
     icon: '📉',

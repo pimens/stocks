@@ -57,6 +57,10 @@ const ALL_FEATURES = {
   macdPositive: { label: 'MACD Positive', group: 'macd', desc: '1 jika MACD > 0' },
   macdGoldenCross: { label: 'MACD Golden Cross', group: 'macd', desc: '1 jika MACD cross di atas Signal (bullish)' },
   macdDeathCross: { label: 'MACD Death Cross', group: 'macd', desc: '1 jika MACD cross di bawah Signal (bearish)' },
+  macdNearGoldenCross: { label: 'MACD Near Golden Cross', group: 'macd', desc: '1 jika histogram < 0 tapi naik (mendekati golden cross)' },
+  macdHistogramConverging: { label: 'MACD Histogram Converging', group: 'macd', desc: '1 jika histogram mendekati 0 dari negatif' },
+  macdHistogramRising: { label: 'MACD Histogram Rising', group: 'macd', desc: '1 jika histogram naik 2 hari berturut-turut' },
+  macdDistanceToSignal: { label: 'MACD Dist to Signal %', group: 'macd', desc: 'Jarak MACD ke Signal dalam persen' },
 
   // Bollinger Bands
   bbUpper: { label: 'BB Upper', group: 'bollinger', desc: 'Bollinger Band atas' },
@@ -220,6 +224,27 @@ const PRESET_RULES = {
       { leftFeature: 'macdHistogram', operator: '>', compareType: 'constant', rightValue: 0 },
       { leftFeature: 'deltaMACDHist', operator: '>', compareType: 'constant', rightValue: 0 },
       { leftFeature: 'rsi', operator: '>', compareType: 'constant', rightValue: 50 },
+    ]
+  },
+  macd_near_golden: {
+    name: '🔮 MACD Near Golden Cross',
+    desc: 'Saham mendekati golden cross - entry sebelum breakout!',
+    rules: [
+      { leftFeature: 'macdNearGoldenCross', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'macdHistogramRising', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'deltaMACDHist', operator: '>', compareType: 'constant', rightValue: 0 },
+      { leftFeature: 'rsi', operator: '>', compareType: 'constant', rightValue: 40 },
+      { leftFeature: 'rsi', operator: '<', compareType: 'constant', rightValue: 65 },
+    ]
+  },
+  macd_converging: {
+    name: '⚡ MACD Converging',
+    desc: 'MACD histogram sangat dekat ke golden cross',
+    rules: [
+      { leftFeature: 'macdHistogramConverging', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'deltaMACDHist', operator: '>', compareType: 'constant', rightValue: 0 },
+      { leftFeature: 'volumeRatio', operator: '>', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'priceAboveSMA20', operator: '==', compareType: 'constant', rightValue: 1 },
     ]
   },
   gap_up_strong: {

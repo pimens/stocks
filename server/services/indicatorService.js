@@ -673,6 +673,21 @@ class IndicatorService {
         macdDeathCross: (prevIdx >= 1 && indicators.macd[prevIdx] && indicators.macd[prevIdx - 1] &&
           indicators.macd[prevIdx - 1].MACD >= indicators.macd[prevIdx - 1].signal &&
           indicators.macd[prevIdx].MACD < indicators.macd[prevIdx].signal) ? 1 : 0,
+        // MACD Near Golden Cross Detection
+        // Histogram negatif tapi naik (converging ke signal line)
+        macdNearGoldenCross: (prevIdx >= 1 && indicators.macd[prevIdx] && indicators.macd[prevIdx - 1] &&
+          indicators.macd[prevIdx].histogram < 0 && // Masih di bawah signal
+          indicators.macd[prevIdx].histogram > indicators.macd[prevIdx - 1].histogram) ? 1 : 0, // Tapi histogram naik
+        // Histogram sangat dekat ke 0 (< 25% dari range)
+        macdHistogramConverging: (indicators.macd[prevIdx] && indicators.macd[prevIdx].histogram < 0 &&
+          Math.abs(indicators.macd[prevIdx].histogram) < Math.abs(indicators.macd[prevIdx].MACD) * 0.25) ? 1 : 0,
+        // MACD Momentum: berapa hari histogram naik berturut-turut
+        macdHistogramRising: (prevIdx >= 2 && indicators.macd[prevIdx] && indicators.macd[prevIdx - 1] && indicators.macd[prevIdx - 2] &&
+          indicators.macd[prevIdx].histogram > indicators.macd[prevIdx - 1].histogram &&
+          indicators.macd[prevIdx - 1].histogram > indicators.macd[prevIdx - 2].histogram) ? 1 : 0,
+        // Jarak MACD ke Signal line (dalam %)
+        macdDistanceToSignal: indicators.macd[prevIdx] && indicators.macd[prevIdx].signal !== 0 ? 
+          parseFloat(((indicators.macd[prevIdx].MACD - indicators.macd[prevIdx].signal) / Math.abs(indicators.macd[prevIdx].signal) * 100).toFixed(2)) : null,
         
         // Bollinger Bands (H-1)
         bbUpper: indicators.bb[prevIdx]?.upper ? parseFloat(indicators.bb[prevIdx].upper.toFixed(2)) : null,
@@ -1009,6 +1024,21 @@ class IndicatorService {
       macdDeathCross: (prevPrevIdx >= 0 && indicators.macd[prevIdx] && indicators.macd[prevPrevIdx] &&
         indicators.macd[prevPrevIdx].MACD >= indicators.macd[prevPrevIdx].signal &&
         indicators.macd[prevIdx].MACD < indicators.macd[prevIdx].signal) ? 1 : 0,
+      // MACD Near Golden Cross Detection
+      // Histogram negatif tapi naik (converging ke signal line)
+      macdNearGoldenCross: (prevPrevIdx >= 0 && indicators.macd[prevIdx] && indicators.macd[prevPrevIdx] &&
+        indicators.macd[prevIdx].histogram < 0 && // Masih di bawah signal
+        indicators.macd[prevIdx].histogram > indicators.macd[prevPrevIdx].histogram) ? 1 : 0, // Tapi histogram naik
+      // Histogram sangat dekat ke 0 (< 25% dari range)
+      macdHistogramConverging: (indicators.macd[prevIdx] && indicators.macd[prevIdx].histogram < 0 &&
+        Math.abs(indicators.macd[prevIdx].histogram) < Math.abs(indicators.macd[prevIdx].MACD) * 0.25) ? 1 : 0,
+      // MACD Momentum: berapa hari histogram naik berturut-turut
+      macdHistogramRising: (prevPrevIdx >= 1 && indicators.macd[prevIdx] && indicators.macd[prevPrevIdx] && indicators.macd[prevPrevIdx - 1] &&
+        indicators.macd[prevIdx].histogram > indicators.macd[prevPrevIdx].histogram &&
+        indicators.macd[prevPrevIdx].histogram > indicators.macd[prevPrevIdx - 1].histogram) ? 1 : 0,
+      // Jarak MACD ke Signal line (dalam %)
+      macdDistanceToSignal: indicators.macd[prevIdx] && indicators.macd[prevIdx].signal !== 0 ? 
+        parseFloat(((indicators.macd[prevIdx].MACD - indicators.macd[prevIdx].signal) / Math.abs(indicators.macd[prevIdx].signal) * 100).toFixed(2)) : null,
       
       // Bollinger Bands
       bbUpper: indicators.bb[prevIdx]?.upper ? parseFloat(indicators.bb[prevIdx].upper.toFixed(2)) : null,
@@ -1237,6 +1267,17 @@ class IndicatorService {
       macdDeathCross: indicators.macd[i] && indicators.macd[prevIdx] && 
         indicators.macd[prevIdx].MACD >= indicators.macd[prevIdx].signal && 
         indicators.macd[i].MACD < indicators.macd[i].signal ? 1 : 0,
+      // MACD Near Golden Cross Detection
+      macdNearGoldenCross: indicators.macd[i] && indicators.macd[prevIdx] &&
+        indicators.macd[i].histogram < 0 && // Masih di bawah signal
+        indicators.macd[i].histogram > indicators.macd[prevIdx].histogram ? 1 : 0, // Tapi histogram naik
+      macdHistogramConverging: indicators.macd[i] && indicators.macd[i].histogram < 0 &&
+        Math.abs(indicators.macd[i].histogram) < Math.abs(indicators.macd[i].MACD) * 0.25 ? 1 : 0,
+      macdHistogramRising: (prevIdx >= 1 && indicators.macd[i] && indicators.macd[prevIdx] && indicators.macd[prevIdx - 1] &&
+        indicators.macd[i].histogram > indicators.macd[prevIdx].histogram &&
+        indicators.macd[prevIdx].histogram > indicators.macd[prevIdx - 1].histogram) ? 1 : 0,
+      macdDistanceToSignal: indicators.macd[i] && indicators.macd[i].signal !== 0 ? 
+        safeToFixed((indicators.macd[i].MACD - indicators.macd[i].signal) / Math.abs(indicators.macd[i].signal) * 100, 2) : null,
       macdCrossUp: indicators.macd[i] && indicators.macd[prevIdx] && 
         indicators.macd[prevIdx].histogram <= 0 && indicators.macd[i].histogram > 0 ? 1 : 0,
       macdCrossDown: indicators.macd[i] && indicators.macd[prevIdx] && 

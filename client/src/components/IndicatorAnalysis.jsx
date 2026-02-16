@@ -36,7 +36,7 @@ const INDICATOR_CATEGORIES = {
   },
   'MACD': {
     icon: '📊',
-    indicators: ['macd', 'macdSignal', 'macdHistogram', 'macdBullish', 'macdPositive', 'macdGoldenCross', 'macdDeathCross', 'deltaMACDHist']
+    indicators: ['macd', 'macdSignal', 'macdHistogram', 'macdBullish', 'macdPositive', 'macdGoldenCross', 'macdDeathCross', 'macdNearGoldenCross', 'macdHistogramConverging', 'macdHistogramRising', 'macdDistanceToSignal', 'deltaMACDHist']
   },
   'Bollinger Bands': {
     icon: '📉',
