@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { stockApi } from '../services/api'
+import { STOCK_PRICES, PRICE_RANGES, getStocksByPriceRange } from '../data/stockPrices'
 import { FiPlus, FiTrash2, FiPlay, FiSave, FiUpload, FiDownload, FiCopy, FiCheck, FiX, FiAlertTriangle, FiInfo, FiChevronDown, FiChevronUp, FiRefreshCw, FiFilter, FiTrendingUp, FiTrendingDown } from 'react-icons/fi'
 
 // All available features for screening
@@ -54,6 +55,8 @@ const ALL_FEATURES = {
   macdHistogram: { label: 'MACD Histogram', group: 'macd', desc: 'Histogram (MACD - Signal)' },
   macdBullish: { label: 'MACD Bullish', group: 'macd', desc: '1 jika MACD > Signal' },
   macdPositive: { label: 'MACD Positive', group: 'macd', desc: '1 jika MACD > 0' },
+  macdGoldenCross: { label: 'MACD Golden Cross', group: 'macd', desc: '1 jika MACD cross di atas Signal (bullish)' },
+  macdDeathCross: { label: 'MACD Death Cross', group: 'macd', desc: '1 jika MACD cross di bawah Signal (bearish)' },
 
   // Bollinger Bands
   bbUpper: { label: 'BB Upper', group: 'bollinger', desc: 'Bollinger Band atas' },
@@ -231,6 +234,145 @@ const PRESET_RULES = {
   }
 }
 
+// Complete IDX stocks with sector info
+const IDX_STOCKS = [
+  // Banking
+  { code: 'BBCA', name: 'Bank Central Asia', sector: 'Banking' },
+  { code: 'BBRI', name: 'Bank Rakyat Indonesia', sector: 'Banking' },
+  { code: 'BMRI', name: 'Bank Mandiri', sector: 'Banking' },
+  { code: 'BBNI', name: 'Bank Negara Indonesia', sector: 'Banking' },
+  { code: 'BRIS', name: 'Bank Syariah Indonesia', sector: 'Banking' },
+  { code: 'BTPN', name: 'Bank BTPN', sector: 'Banking' },
+  { code: 'NISP', name: 'Bank OCBC NISP', sector: 'Banking' },
+  { code: 'BDMN', name: 'Bank Danamon', sector: 'Banking' },
+  { code: 'BNGA', name: 'Bank CIMB Niaga', sector: 'Banking' },
+  { code: 'MEGA', name: 'Bank Mega', sector: 'Banking' },
+  { code: 'PNBN', name: 'Bank Pan Indonesia', sector: 'Banking' },
+  { code: 'BJBR', name: 'Bank BJB', sector: 'Banking' },
+  { code: 'BJTM', name: 'Bank Jatim', sector: 'Banking' },
+  { code: 'BBTN', name: 'Bank BTN', sector: 'Banking' },
+  { code: 'ARTO', name: 'Bank Jago', sector: 'Banking' },
+  // Telco
+  { code: 'TLKM', name: 'Telkom Indonesia', sector: 'Telecom' },
+  { code: 'EXCL', name: 'XL Axiata', sector: 'Telecom' },
+  { code: 'ISAT', name: 'Indosat Ooredoo', sector: 'Telecom' },
+  { code: 'TOWR', name: 'Sarana Menara Nusantara', sector: 'Telecom' },
+  { code: 'TBIG', name: 'Tower Bersama Infrastructure', sector: 'Telecom' },
+  // Consumer
+  { code: 'UNVR', name: 'Unilever Indonesia', sector: 'Consumer' },
+  { code: 'ICBP', name: 'Indofood CBP', sector: 'Consumer' },
+  { code: 'INDF', name: 'Indofood', sector: 'Consumer' },
+  { code: 'KLBF', name: 'Kalbe Farma', sector: 'Consumer' },
+  { code: 'SIDO', name: 'Industri Jamu Sido Muncul', sector: 'Consumer' },
+  { code: 'MYOR', name: 'Mayora Indah', sector: 'Consumer' },
+  { code: 'ULTJ', name: 'Ultra Jaya Milk', sector: 'Consumer' },
+  { code: 'ROTI', name: 'Nippon Indosari Corpindo', sector: 'Consumer' },
+  // Tobacco
+  { code: 'HMSP', name: 'HM Sampoerna', sector: 'Tobacco' },
+  { code: 'GGRM', name: 'Gudang Garam', sector: 'Tobacco' },
+  // Automotive
+  { code: 'ASII', name: 'Astra International', sector: 'Automotive' },
+  { code: 'AUTO', name: 'Astra Otoparts', sector: 'Automotive' },
+  { code: 'SMSM', name: 'Selamat Sempurna', sector: 'Automotive' },
+  // Mining
+  { code: 'ADRO', name: 'Adaro Energy Indonesia', sector: 'Mining' },
+  { code: 'PTBA', name: 'Bukit Asam', sector: 'Mining' },
+  { code: 'ITMG', name: 'Indo Tambangraya Megah', sector: 'Mining' },
+  { code: 'ANTM', name: 'Aneka Tambang', sector: 'Mining' },
+  { code: 'INCO', name: 'Vale Indonesia', sector: 'Mining' },
+  { code: 'TINS', name: 'Timah', sector: 'Mining' },
+  { code: 'MDKA', name: 'Merdeka Copper Gold', sector: 'Mining' },
+  { code: 'MEDC', name: 'Medco Energi', sector: 'Mining' },
+  { code: 'HRUM', name: 'Harum Energy', sector: 'Mining' },
+  { code: 'BYAN', name: 'Bayan Resources', sector: 'Mining' },
+  // Oil & Gas
+  { code: 'PGAS', name: 'Perusahaan Gas Negara', sector: 'Oil & Gas' },
+  { code: 'AKRA', name: 'AKR Corporindo', sector: 'Oil & Gas' },
+  // Cement
+  { code: 'SMGR', name: 'Semen Indonesia', sector: 'Cement' },
+  { code: 'INTP', name: 'Indocement Tunggal Prakarsa', sector: 'Cement' },
+  // Construction
+  { code: 'WIKA', name: 'Wijaya Karya', sector: 'Construction' },
+  { code: 'WSKT', name: 'Waskita Karya', sector: 'Construction' },
+  { code: 'PTPP', name: 'PP (Persero)', sector: 'Construction' },
+  { code: 'ADHI', name: 'Adhi Karya', sector: 'Construction' },
+  { code: 'JSMR', name: 'Jasa Marga', sector: 'Construction' },
+  // Heavy Equipment
+  { code: 'UNTR', name: 'United Tractors', sector: 'Heavy Equipment' },
+  // Retail
+  { code: 'ACES', name: 'Ace Hardware Indonesia', sector: 'Retail' },
+  { code: 'MAPI', name: 'Mitra Adiperkasa', sector: 'Retail' },
+  { code: 'ERAA', name: 'Erajaya Swasembada', sector: 'Retail' },
+  { code: 'AMRT', name: 'Sumber Alfaria Trijaya', sector: 'Retail' },
+  { code: 'LPPF', name: 'Matahari Department Store', sector: 'Retail' },
+  // Property
+  { code: 'BSDE', name: 'Bumi Serpong Damai', sector: 'Property' },
+  { code: 'CTRA', name: 'Ciputra Development', sector: 'Property' },
+  { code: 'SMRA', name: 'Summarecon Agung', sector: 'Property' },
+  { code: 'PWON', name: 'Pakuwon Jati', sector: 'Property' },
+  // Poultry
+  { code: 'CPIN', name: 'Charoen Pokphand Indonesia', sector: 'Poultry' },
+  { code: 'JPFA', name: 'Japfa Comfeed Indonesia', sector: 'Poultry' },
+  // Plantation
+  { code: 'AALI', name: 'Astra Agro Lestari', sector: 'Plantation' },
+  { code: 'LSIP', name: 'PP London Sumatra', sector: 'Plantation' },
+  // Media
+  { code: 'SCMA', name: 'Surya Citra Media', sector: 'Media' },
+  { code: 'MNCN', name: 'Media Nusantara Citra', sector: 'Media' },
+  // Technology
+  { code: 'GOTO', name: 'GoTo Gojek Tokopedia', sector: 'Technology' },
+  { code: 'BUKA', name: 'Bukalapak.com', sector: 'Technology' },
+  { code: 'EMTK', name: 'Elang Mahkota Teknologi', sector: 'Technology' },
+  { code: 'MTDL', name: 'Metrodata Electronics', sector: 'Technology' },
+  // Finance
+  { code: 'ADMF', name: 'Adira Dinamika Multi Finance', sector: 'Finance' },
+  { code: 'BFIN', name: 'BFI Finance Indonesia', sector: 'Finance' },
+  // Healthcare
+  { code: 'MIKA', name: 'Mitra Keluarga Karyasehat', sector: 'Healthcare' },
+  { code: 'SILO', name: 'Siloam International Hospitals', sector: 'Healthcare' },
+  // Chemical
+  { code: 'BRPT', name: 'Barito Pacific', sector: 'Chemical' },
+  { code: 'TPIA', name: 'Chandra Asri Petrochemical', sector: 'Chemical' },
+  // Paper
+  { code: 'INKP', name: 'Indah Kiat Pulp & Paper', sector: 'Paper' },
+  { code: 'TKIM', name: 'Pabrik Kertas Tjiwi Kimia', sector: 'Paper' },
+  // Transportation
+  { code: 'BIRD', name: 'Blue Bird', sector: 'Transportation' },
+  { code: 'GIAA', name: 'Garuda Indonesia', sector: 'Transportation' },
+  // Others
+  { code: 'SRTG', name: 'Saratoga Investama Sedaya', sector: 'Investment' },
+  { code: 'ESSA', name: 'Surya Esa Perkasa', sector: 'Energy' },
+  { code: 'AMMN', name: 'Amman Mineral Internasional', sector: 'Mining' },
+  { code: 'PGEO', name: 'Pertamina Geothermal Energy', sector: 'Energy' },
+]
+
+// Sector colors
+const SECTOR_COLORS = {
+  'Banking': 'emerald',
+  'Telecom': 'violet',
+  'Consumer': 'orange',
+  'Tobacco': 'amber',
+  'Automotive': 'slate',
+  'Mining': 'yellow',
+  'Oil & Gas': 'red',
+  'Cement': 'stone',
+  'Construction': 'zinc',
+  'Heavy Equipment': 'gray',
+  'Retail': 'pink',
+  'Property': 'cyan',
+  'Poultry': 'lime',
+  'Plantation': 'green',
+  'Media': 'purple',
+  'Technology': 'indigo',
+  'Finance': 'teal',
+  'Healthcare': 'rose',
+  'Chemical': 'fuchsia',
+  'Paper': 'amber',
+  'Transportation': 'sky',
+  'Investment': 'blue',
+  'Energy': 'orange',
+}
+
 // LQ45 stocks list
 const LQ45_STOCKS = [
   'ACES', 'ADRO', 'AKRA', 'AMMN', 'AMRT', 'ANTM', 'ARTO', 'ASII', 'BBCA', 'BBNI',
@@ -247,10 +389,15 @@ const IDX30_STOCKS = [
   'MDKA', 'MEDC', 'PGAS', 'SMGR', 'TBIG', 'TLKM', 'TOWR', 'UNTR', 'UNVR'
 ]
 
+// Get unique sectors
+const ALL_SECTORS = [...new Set(IDX_STOCKS.map(s => s.sector))].sort()
+
 export default function RuleScreener() {
   // Stock list
-  const [stockList, setStockList] = useState('lq45') // 'lq45', 'idx30', 'custom'
+  const [stockList, setStockList] = useState('lq45') // 'lq45', 'idx30', 'sector', 'price', 'all', 'custom'
   const [customStocks, setCustomStocks] = useState('')
+  const [selectedSectors, setSelectedSectors] = useState([]) // For sector filter
+  const [selectedPriceRange, setSelectedPriceRange] = useState('all') // For price range filter
   
   // Target date for screening
   const [targetDate, setTargetDate] = useState(new Date().toISOString().split('T')[0])
@@ -302,12 +449,27 @@ export default function RuleScreener() {
         return LQ45_STOCKS
       case 'idx30':
         return IDX30_STOCKS
+      case 'sector':
+        // Filter by selected sectors
+        if (selectedSectors.length === 0) return IDX_STOCKS.map(s => s.code)
+        return IDX_STOCKS.filter(s => selectedSectors.includes(s.sector)).map(s => s.code)
+      case 'price':
+        // Filter by price range
+        if (selectedPriceRange === 'all') {
+          return Object.keys(STOCK_PRICES).filter(code => STOCK_PRICES[code] > 0)
+        }
+        const grouped = getStocksByPriceRange()
+        const rangeData = grouped[selectedPriceRange]
+        return rangeData?.stocks?.map(s => s.code) || []
+      case 'all':
+        // All stocks from IDX_STOCKS
+        return IDX_STOCKS.map(s => s.code)
       case 'custom':
         return customStocks.split(',').map(s => s.trim().toUpperCase()).filter(s => s)
       default:
         return LQ45_STOCKS
     }
-  }, [stockList, customStocks])
+  }, [stockList, customStocks, selectedSectors, selectedPriceRange])
 
   // Add new rule
   const addRule = () => {
@@ -709,42 +871,148 @@ export default function RuleScreener() {
         {/* Stock Selection */}
         <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
           <h3 className="text-lg font-semibold text-white mb-3">📋 Pilih Saham</h3>
-          <div className="flex flex-wrap gap-3">
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                name="stockList"
-                value="lq45"
-                checked={stockList === 'lq45'}
-                onChange={(e) => setStockList(e.target.value)}
-                className="text-blue-500"
-              />
-              <span className="text-white">LQ45 ({LQ45_STOCKS.length} saham)</span>
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                name="stockList"
-                value="idx30"
-                checked={stockList === 'idx30'}
-                onChange={(e) => setStockList(e.target.value)}
-                className="text-blue-500"
-              />
-              <span className="text-white">IDX30 ({IDX30_STOCKS.length} saham)</span>
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                name="stockList"
-                value="custom"
-                checked={stockList === 'custom'}
-                onChange={(e) => setStockList(e.target.value)}
-                className="text-blue-500"
-              />
-              <span className="text-white">Custom</span>
-            </label>
+          
+          {/* Main selection options */}
+          <div className="flex flex-wrap gap-2 mb-3">
+            <button
+              onClick={() => setStockList('lq45')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                stockList === 'lq45' 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              📊 LQ45 ({LQ45_STOCKS.length})
+            </button>
+            <button
+              onClick={() => setStockList('idx30')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                stockList === 'idx30' 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              📈 IDX30 ({IDX30_STOCKS.length})
+            </button>
+            <button
+              onClick={() => setStockList('all')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                stockList === 'all' 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              🌐 Semua ({IDX_STOCKS.length})
+            </button>
+            <button
+              onClick={() => setStockList('sector')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                stockList === 'sector' 
+                  ? 'bg-green-600 text-white' 
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              🏢 Per Sektor
+            </button>
+            <button
+              onClick={() => setStockList('price')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                stockList === 'price' 
+                  ? 'bg-yellow-600 text-white' 
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              💰 Range Harga
+            </button>
+            <button
+              onClick={() => setStockList('custom')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                stockList === 'custom' 
+                  ? 'bg-purple-600 text-white' 
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              ✏️ Custom
+            </button>
           </div>
 
+          {/* Sector selection */}
+          {stockList === 'sector' && (
+            <div className="mt-3 p-3 bg-gray-700/50 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-gray-400">Pilih Sektor:</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSelectedSectors(ALL_SECTORS)}
+                    className="text-xs text-blue-400 hover:text-blue-300"
+                  >
+                    Pilih Semua
+                  </button>
+                  <button
+                    onClick={() => setSelectedSectors([])}
+                    className="text-xs text-gray-400 hover:text-gray-300"
+                  >
+                    Reset
+                  </button>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {ALL_SECTORS.map(sector => (
+                  <button
+                    key={sector}
+                    onClick={() => {
+                      setSelectedSectors(prev => 
+                        prev.includes(sector) 
+                          ? prev.filter(s => s !== sector)
+                          : [...prev, sector]
+                      )
+                    }}
+                    className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                      selectedSectors.includes(sector)
+                        ? `bg-${SECTOR_COLORS[sector] || 'blue'}-600 text-white`
+                        : 'bg-gray-600 text-gray-300 hover:bg-gray-500'
+                    }`}
+                  >
+                    {sector} ({IDX_STOCKS.filter(s => s.sector === sector).length})
+                  </button>
+                ))}
+              </div>
+              <div className="mt-2 text-xs text-gray-500">
+                {selectedSectors.length === 0 
+                  ? `Tidak ada sektor dipilih (semua ${IDX_STOCKS.length} saham)`
+                  : `${getSelectedStocks().length} saham dipilih dari ${selectedSectors.length} sektor`}
+              </div>
+            </div>
+          )}
+
+          {/* Price range selection */}
+          {stockList === 'price' && (
+            <div className="mt-3 p-3 bg-gray-700/50 rounded-lg">
+              <span className="text-sm text-gray-400 block mb-2">Pilih Range Harga:</span>
+              <select
+                value={selectedPriceRange}
+                onChange={(e) => setSelectedPriceRange(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 text-white"
+              >
+                <option value="all">📊 Semua Harga</option>
+                <option value="micro">🔹 Saham Gorengan (&lt; Rp 50)</option>
+                <option value="penny">💰 Rp 50 - 100</option>
+                <option value="cheap">💵 Rp 100 - 200</option>
+                <option value="low">📊 Rp 200 - 500</option>
+                <option value="medium">📈 Rp 500 - 1.000</option>
+                <option value="mid">💹 Rp 1.000 - 2.000</option>
+                <option value="high">🏦 Rp 2.000 - 5.000</option>
+                <option value="premium">💎 Rp 5.000 - 10.000</option>
+                <option value="elite">👑 Rp 10.000 - 50.000</option>
+                <option value="ultra">🚀 &gt; Rp 50.000</option>
+              </select>
+              <div className="mt-2 text-xs text-gray-500">
+                {getSelectedStocks().length} saham dalam range harga ini
+              </div>
+            </div>
+          )}
+
+          {/* Custom input */}
           {stockList === 'custom' && (
             <div className="mt-3">
               <input
@@ -754,6 +1022,16 @@ export default function RuleScreener() {
                 onChange={(e) => setCustomStocks(e.target.value)}
                 className="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 text-white"
               />
+              <div className="mt-2 text-xs text-gray-500">
+                {getSelectedStocks().length} saham akan di-scan
+              </div>
+            </div>
+          )}
+
+          {/* Show selected count for index-based selections */}
+          {['lq45', 'idx30', 'all'].includes(stockList) && (
+            <div className="mt-2 text-xs text-gray-500">
+              {getSelectedStocks().length} saham akan di-scan
             </div>
           )}
         </div>

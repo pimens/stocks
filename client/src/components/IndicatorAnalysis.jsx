@@ -36,7 +36,7 @@ const INDICATOR_CATEGORIES = {
   },
   'MACD': {
     icon: '📊',
-    indicators: ['macd', 'macdSignal', 'macdHistogram', 'macdBullish', 'macdPositive', 'deltaMACDHist']
+    indicators: ['macd', 'macdSignal', 'macdHistogram', 'macdBullish', 'macdPositive', 'macdGoldenCross', 'macdDeathCross', 'deltaMACDHist']
   },
   'Bollinger Bands': {
     icon: '📉',
@@ -100,7 +100,7 @@ const DEFAULT_PRESETS = [
     id: 'momentum',
     name: '🚀 Momentum Trading',
     description: 'Indikator untuk strategi momentum',
-    indicators: ['rsi', 'macd', 'macdHistogram', 'macdBullish', 'stochK', 'stochD', 'momentum', 'roc', 'rocPositive', 'adx', 'strongTrend']
+    indicators: ['rsi', 'macd', 'macdHistogram', 'macdBullish', 'macdGoldenCross', 'macdDeathCross', 'stochK', 'stochD', 'momentum', 'roc', 'rocPositive', 'adx', 'strongTrend']
   },
   {
     id: 'trend-following',

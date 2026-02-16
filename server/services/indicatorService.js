@@ -667,6 +667,12 @@ class IndicatorService {
         macdHistogram: indicators.macd[prevIdx]?.histogram ? parseFloat(indicators.macd[prevIdx].histogram.toFixed(4)) : null,
         macdBullish: indicators.macd[prevIdx] && indicators.macd[prevIdx].MACD > indicators.macd[prevIdx].signal ? 1 : 0,
         macdPositive: indicators.macd[prevIdx] && indicators.macd[prevIdx].MACD > 0 ? 1 : 0,
+        macdGoldenCross: (prevIdx >= 1 && indicators.macd[prevIdx] && indicators.macd[prevIdx - 1] &&
+          indicators.macd[prevIdx - 1].MACD <= indicators.macd[prevIdx - 1].signal &&
+          indicators.macd[prevIdx].MACD > indicators.macd[prevIdx].signal) ? 1 : 0,
+        macdDeathCross: (prevIdx >= 1 && indicators.macd[prevIdx] && indicators.macd[prevIdx - 1] &&
+          indicators.macd[prevIdx - 1].MACD >= indicators.macd[prevIdx - 1].signal &&
+          indicators.macd[prevIdx].MACD < indicators.macd[prevIdx].signal) ? 1 : 0,
         
         // Bollinger Bands (H-1)
         bbUpper: indicators.bb[prevIdx]?.upper ? parseFloat(indicators.bb[prevIdx].upper.toFixed(2)) : null,
@@ -997,6 +1003,12 @@ class IndicatorService {
       macdHistogram: indicators.macd[prevIdx]?.histogram ? parseFloat(indicators.macd[prevIdx].histogram.toFixed(4)) : null,
       macdBullish: indicators.macd[prevIdx] && indicators.macd[prevIdx].MACD > indicators.macd[prevIdx].signal ? 1 : 0,
       macdPositive: indicators.macd[prevIdx] && indicators.macd[prevIdx].MACD > 0 ? 1 : 0,
+      macdGoldenCross: (prevPrevIdx >= 0 && indicators.macd[prevIdx] && indicators.macd[prevPrevIdx] &&
+        indicators.macd[prevPrevIdx].MACD <= indicators.macd[prevPrevIdx].signal &&
+        indicators.macd[prevIdx].MACD > indicators.macd[prevIdx].signal) ? 1 : 0,
+      macdDeathCross: (prevPrevIdx >= 0 && indicators.macd[prevIdx] && indicators.macd[prevPrevIdx] &&
+        indicators.macd[prevPrevIdx].MACD >= indicators.macd[prevPrevIdx].signal &&
+        indicators.macd[prevIdx].MACD < indicators.macd[prevIdx].signal) ? 1 : 0,
       
       // Bollinger Bands
       bbUpper: indicators.bb[prevIdx]?.upper ? parseFloat(indicators.bb[prevIdx].upper.toFixed(2)) : null,
@@ -1219,6 +1231,12 @@ class IndicatorService {
       macdSignal: safeToFixed(indicators.macd[i]?.signal, 4),
       macdHistogram: safeToFixed(indicators.macd[i]?.histogram, 4),
       macdBullish: indicators.macd[i] && indicators.macd[i].histogram > 0 ? 1 : 0,
+      macdGoldenCross: indicators.macd[i] && indicators.macd[prevIdx] && 
+        indicators.macd[prevIdx].MACD <= indicators.macd[prevIdx].signal && 
+        indicators.macd[i].MACD > indicators.macd[i].signal ? 1 : 0,
+      macdDeathCross: indicators.macd[i] && indicators.macd[prevIdx] && 
+        indicators.macd[prevIdx].MACD >= indicators.macd[prevIdx].signal && 
+        indicators.macd[i].MACD < indicators.macd[i].signal ? 1 : 0,
       macdCrossUp: indicators.macd[i] && indicators.macd[prevIdx] && 
         indicators.macd[prevIdx].histogram <= 0 && indicators.macd[i].histogram > 0 ? 1 : 0,
       macdCrossDown: indicators.macd[i] && indicators.macd[prevIdx] && 

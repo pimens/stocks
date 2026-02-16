@@ -22,6 +22,24 @@ class IndicatorService {
     return padded;
   }
 
+  // Calculate EMA of High prices
+  calculateEMAHigh(prices, period = 21) {
+    const highs = prices.map(p => p.high);
+    const values = EMA.calculate({ period, values: highs });
+    
+    const padded = Array(prices.length - values.length).fill(null).concat(values);
+    return padded;
+  }
+
+  // Calculate EMA of Low prices
+  calculateEMALow(prices, period = 21) {
+    const lows = prices.map(p => p.low);
+    const values = EMA.calculate({ period, values: lows });
+    
+    const padded = Array(prices.length - values.length).fill(null).concat(values);
+    return padded;
+  }
+
   // Calculate RSI (Relative Strength Index)
   calculateRSI(prices, period = 14) {
     const closes = prices.map(p => p.close);
@@ -474,6 +492,9 @@ class IndicatorService {
     const ema10 = this.calculateEMA(prices, 10);
     const ema12 = this.calculateEMA(prices, 12);
     const ema26 = this.calculateEMA(prices, 26);
+    const ema21 = this.calculateEMA(prices, 21);
+    const ema21High = this.calculateEMAHigh(prices, 21);
+    const ema21Low = this.calculateEMALow(prices, 21);
     const rsi = this.calculateRSI(prices, 14);
     const macd = this.calculateMACD(prices);
     const bb = this.calculateBollingerBands(prices);
@@ -491,7 +512,7 @@ class IndicatorService {
 
     return {
       sma5, sma10, sma20, sma50,
-      ema5, ema10, ema12, ema26,
+      ema5, ema10, ema12, ema26, ema21, ema21High, ema21Low,
       rsi, macd, bb, stoch, adx, atr, obv,
       williamsR, cci, mfi, roc, momentum, pricePosition, volumeRatio
     };
@@ -646,6 +667,12 @@ class IndicatorService {
         macdHistogram: indicators.macd[prevIdx]?.histogram ? parseFloat(indicators.macd[prevIdx].histogram.toFixed(4)) : null,
         macdBullish: indicators.macd[prevIdx] && indicators.macd[prevIdx].MACD > indicators.macd[prevIdx].signal ? 1 : 0,
         macdPositive: indicators.macd[prevIdx] && indicators.macd[prevIdx].MACD > 0 ? 1 : 0,
+        macdGoldenCross: (prevIdx >= 1 && indicators.macd[prevIdx] && indicators.macd[prevIdx - 1] &&
+          indicators.macd[prevIdx - 1].MACD <= indicators.macd[prevIdx - 1].signal &&
+          indicators.macd[prevIdx].MACD > indicators.macd[prevIdx].signal) ? 1 : 0,
+        macdDeathCross: (prevIdx >= 1 && indicators.macd[prevIdx] && indicators.macd[prevIdx - 1] &&
+          indicators.macd[prevIdx - 1].MACD >= indicators.macd[prevIdx - 1].signal &&
+          indicators.macd[prevIdx].MACD < indicators.macd[prevIdx].signal) ? 1 : 0,
         
         // Bollinger Bands (H-1)
         bbUpper: indicators.bb[prevIdx]?.upper ? parseFloat(indicators.bb[prevIdx].upper.toFixed(2)) : null,
@@ -735,7 +762,62 @@ class IndicatorService {
     return dataset;
   }
 
-  // Get indicators for a specific date (for single prediction)
+  // Generate trading signals
+  generateSignals(indicators) {
+    const signals = [];
+    const current = indicators.current;
+
+    // RSI signals
+    if (current.rsi) {
+      if (current.rsi < 30) {
+        signals.push({ type: 'BUY', indicator: 'RSI', reason: `RSI oversold at ${current.rsi.toFixed(2)}` });
+      } else if (current.rsi > 70) {
+        signals.push({ type: 'SELL', indicator: 'RSI', reason: `RSI overbought at ${current.rsi.toFixed(2)}` });
+      }
+    }
+
+    // MACD signals
+    if (current.macd) {
+      if (current.macd.MACD > current.macd.signal && current.macd.histogram > 0) {
+        signals.push({ type: 'BUY', indicator: 'MACD', reason: 'MACD bullish crossover' });
+      } else if (current.macd.MACD < current.macd.signal && current.macd.histogram < 0) {
+        signals.push({ type: 'SELL', indicator: 'MACD', reason: 'MACD bearish crossover' });
+      }
+    }
+
+    // Moving Average signals
+    if (current.sma20 && current.sma50) {
+      if (current.price > current.sma20 && current.sma20 > current.sma50) {
+        signals.push({ type: 'BUY', indicator: 'MA', reason: 'Price above SMA20 > SMA50 (uptrend)' });
+      } else if (current.price < current.sma20 && current.sma20 < current.sma50) {
+        signals.push({ type: 'SELL', indicator: 'MA', reason: 'Price below SMA20 < SMA50 (downtrend)' });
+      }
+    }
+
+    // Bollinger Bands signals
+    if (current.bollingerBands) {
+      if (current.price < current.bollingerBands.lower) {
+        signals.push({ type: 'BUY', indicator: 'BB', reason: 'Price below lower Bollinger Band' });
+      } else if (current.price > current.bollingerBands.upper) {
+        signals.push({ type: 'SELL', indicator: 'BB', reason: 'Price above upper Bollinger Band' });
+      }
+    }
+
+    // Stochastic signals
+    if (current.stochastic) {
+      if (current.stochastic.k < 20 && current.stochastic.d < 20) {
+        signals.push({ type: 'BUY', indicator: 'Stoch', reason: 'Stochastic oversold' });
+      } else if (current.stochastic.k > 80 && current.stochastic.d > 80) {
+        signals.push({ type: 'SELL', indicator: 'Stoch', reason: 'Stochastic overbought' });
+      }
+    }
+
+    return signals;
+  }
+
+  // Get indicator data for a specific date (H-1 data for predicting date H)
+  // targetDate: the date we want to predict (H)
+  // Returns indicators from the day before (H-1)
   getIndicatorsForDate(prices, targetDate) {
     const indicators = this.calculateIndicatorsForRegression(prices);
     
@@ -817,8 +899,8 @@ class IndicatorService {
     const deltaMFI = (indicators.mfi[prevIdx] !== null && indicators.mfi[prevPrevIdx] !== null)
       ? indicators.mfi[prevIdx] - indicators.mfi[prevPrevIdx] : null;
 
-    // Also get actual data for target date if available (for verification) - not available for future dates
-    const actualData = isFutureDate ? null : {
+    // Also get actual data for target date if available (for verification)
+    const actualData = {
       date: prices[i].date,
       open: prices[i].open,
       high: prices[i].high,
@@ -836,8 +918,8 @@ class IndicatorService {
       indicatorDate: prices[prevIdx].date,
       isFutureDate: isFutureDate,
       
-      // Actual data for verification (if available)
-      actualData,
+      // Actual data for verification (if available) - not available for future dates
+      actualData: isFutureDate ? null : actualData,
       
       // Indicator data (H-1)
       prevClose: parseFloat(prevClose.toFixed(2)),
@@ -871,6 +953,9 @@ class IndicatorService {
       ema10: indicators.ema10[prevIdx] ? parseFloat(indicators.ema10[prevIdx].toFixed(2)) : null,
       ema12: indicators.ema12[prevIdx] ? parseFloat(indicators.ema12[prevIdx].toFixed(2)) : null,
       ema26: indicators.ema26[prevIdx] ? parseFloat(indicators.ema26[prevIdx].toFixed(2)) : null,
+      ema21: indicators.ema21[prevIdx] ? parseFloat(indicators.ema21[prevIdx].toFixed(2)) : null,
+      ema21High: indicators.ema21High[prevIdx] ? parseFloat(indicators.ema21High[prevIdx].toFixed(2)) : null,
+      ema21Low: indicators.ema21Low[prevIdx] ? parseFloat(indicators.ema21Low[prevIdx].toFixed(2)) : null,
       
       // Price vs MA signals
       priceAboveSMA5: prevClose > (indicators.sma5[prevIdx] || 0) ? 1 : 0,
@@ -879,6 +964,22 @@ class IndicatorService {
       priceAboveSMA50: prevClose > (indicators.sma50[prevIdx] || 0) ? 1 : 0,
       priceAboveEMA12: prevClose > (indicators.ema12[prevIdx] || 0) ? 1 : 0,
       priceAboveEMA26: prevClose > (indicators.ema26[prevIdx] || 0) ? 1 : 0,
+      priceAboveEMA21: prevClose > (indicators.ema21[prevIdx] || 0) ? 1 : 0,
+      priceAboveEMA21High: prevClose > (indicators.ema21High[prevIdx] || 0) ? 1 : 0,
+      priceBelowEMA21Low: prevClose < (indicators.ema21Low[prevIdx] || Infinity) ? 1 : 0,
+      
+      // Distance from EMA 21
+      distFromEMA21: indicators.ema21[prevIdx] ? parseFloat(((prevClose - indicators.ema21[prevIdx]) / indicators.ema21[prevIdx] * 100).toFixed(4)) : null,
+      distFromEMA21High: indicators.ema21High[prevIdx] ? parseFloat(((prevClose - indicators.ema21High[prevIdx]) / indicators.ema21High[prevIdx] * 100).toFixed(4)) : null,
+      distFromEMA21Low: indicators.ema21Low[prevIdx] ? parseFloat(((prevClose - indicators.ema21Low[prevIdx]) / indicators.ema21Low[prevIdx] * 100).toFixed(4)) : null,
+      
+      // EMA 21 Cross signals (price crossed above/below)
+      priceCrossAboveEMA21: prevPrevIdx >= 0 && prices[prevPrevIdx]?.close && indicators.ema21[prevPrevIdx] && indicators.ema21[prevIdx]
+        ? (prices[prevPrevIdx].close <= indicators.ema21[prevPrevIdx] && prevClose > indicators.ema21[prevIdx] ? 1 : 0)
+        : 0,
+      priceCrossBelowEMA21: prevPrevIdx >= 0 && prices[prevPrevIdx]?.close && indicators.ema21[prevPrevIdx] && indicators.ema21[prevIdx]
+        ? (prices[prevPrevIdx].close >= indicators.ema21[prevPrevIdx] && prevClose < indicators.ema21[prevIdx] ? 1 : 0)
+        : 0,
       
       // Distance from MA
       distFromSMA5: indicators.sma5[prevIdx] ? parseFloat(((prevClose - indicators.sma5[prevIdx]) / indicators.sma5[prevIdx] * 100).toFixed(4)) : null,
@@ -902,6 +1003,12 @@ class IndicatorService {
       macdHistogram: indicators.macd[prevIdx]?.histogram ? parseFloat(indicators.macd[prevIdx].histogram.toFixed(4)) : null,
       macdBullish: indicators.macd[prevIdx] && indicators.macd[prevIdx].MACD > indicators.macd[prevIdx].signal ? 1 : 0,
       macdPositive: indicators.macd[prevIdx] && indicators.macd[prevIdx].MACD > 0 ? 1 : 0,
+      macdGoldenCross: (prevPrevIdx >= 0 && indicators.macd[prevIdx] && indicators.macd[prevPrevIdx] &&
+        indicators.macd[prevPrevIdx].MACD <= indicators.macd[prevPrevIdx].signal &&
+        indicators.macd[prevIdx].MACD > indicators.macd[prevIdx].signal) ? 1 : 0,
+      macdDeathCross: (prevPrevIdx >= 0 && indicators.macd[prevIdx] && indicators.macd[prevPrevIdx] &&
+        indicators.macd[prevPrevIdx].MACD >= indicators.macd[prevPrevIdx].signal &&
+        indicators.macd[prevIdx].MACD < indicators.macd[prevIdx].signal) ? 1 : 0,
       
       // Bollinger Bands
       bbUpper: indicators.bb[prevIdx]?.upper ? parseFloat(indicators.bb[prevIdx].upper.toFixed(2)) : null,
@@ -988,59 +1095,6 @@ class IndicatorService {
     return row;
   }
 
-  // Generate trading signals
-  generateSignals(indicators) {
-    const signals = [];
-    const current = indicators.current;
-
-    // RSI signals
-    if (current.rsi) {
-      if (current.rsi < 30) {
-        signals.push({ type: 'BUY', indicator: 'RSI', reason: `RSI oversold at ${current.rsi.toFixed(2)}` });
-      } else if (current.rsi > 70) {
-        signals.push({ type: 'SELL', indicator: 'RSI', reason: `RSI overbought at ${current.rsi.toFixed(2)}` });
-      }
-    }
-
-    // MACD signals
-    if (current.macd) {
-      if (current.macd.MACD > current.macd.signal && current.macd.histogram > 0) {
-        signals.push({ type: 'BUY', indicator: 'MACD', reason: 'MACD bullish crossover' });
-      } else if (current.macd.MACD < current.macd.signal && current.macd.histogram < 0) {
-        signals.push({ type: 'SELL', indicator: 'MACD', reason: 'MACD bearish crossover' });
-      }
-    }
-
-    // Moving Average signals
-    if (current.sma20 && current.sma50) {
-      if (current.price > current.sma20 && current.sma20 > current.sma50) {
-        signals.push({ type: 'BUY', indicator: 'MA', reason: 'Price above SMA20 > SMA50 (uptrend)' });
-      } else if (current.price < current.sma20 && current.sma20 < current.sma50) {
-        signals.push({ type: 'SELL', indicator: 'MA', reason: 'Price below SMA20 < SMA50 (downtrend)' });
-      }
-    }
-
-    // Bollinger Bands signals
-    if (current.bollingerBands) {
-      if (current.price < current.bollingerBands.lower) {
-        signals.push({ type: 'BUY', indicator: 'BB', reason: 'Price below lower Bollinger Band' });
-      } else if (current.price > current.bollingerBands.upper) {
-        signals.push({ type: 'SELL', indicator: 'BB', reason: 'Price above upper Bollinger Band' });
-      }
-    }
-
-    // Stochastic signals
-    if (current.stochastic) {
-      if (current.stochastic.k < 20 && current.stochastic.d < 20) {
-        signals.push({ type: 'BUY', indicator: 'Stoch', reason: 'Stochastic oversold' });
-      } else if (current.stochastic.k > 80 && current.stochastic.d > 80) {
-        signals.push({ type: 'SELL', indicator: 'Stoch', reason: 'Stochastic overbought' });
-      }
-    }
-
-    return signals;
-  }
-
   // Get intraday indicators - using current day's partial data as latest candle
   getIntradayIndicators(prices) {
     if (prices.length < 60) {
@@ -1058,6 +1112,7 @@ class IndicatorService {
     const supertrend = this.calculateSuperTrend ? this.calculateSuperTrend(prices) : Array(prices.length).fill(null);
     const vwap = this.calculateVWAP ? this.calculateVWAP(prices) : Array(prices.length).fill(null);
     
+    // Use the last index (today's partial data) as the "current" day
     const i = prices.length - 1;
     const prevIdx = i - 1;
     const prevPrevIdx = i - 2;
@@ -1074,10 +1129,14 @@ class IndicatorService {
     const currentVolume = currentPrice.volume || 0;
     const prevClosePrice = prevPrice?.close || currentClose;
     
+    // Close Position
     const closePosition = currentRange > 0 ? (currentClose - currentLow) / currentRange : 0.5;
+    
+    // Body/Range Ratio
     const bodySize = Math.abs(currentClose - currentOpen) || 0;
     const bodyRangeRatio = currentRange > 0 ? bodySize / currentRange : 0;
     
+    // Delta indicators (comparing current with previous day)
     const deltaRSI = (indicators.rsi[i] !== null && indicators.rsi[prevIdx] !== null)
       ? indicators.rsi[i] - indicators.rsi[prevIdx] : null;
     
@@ -1096,6 +1155,7 @@ class IndicatorService {
     const deltaMFI = (indicators.mfi[i] !== null && indicators.mfi[prevIdx] !== null)
       ? indicators.mfi[i] - indicators.mfi[prevIdx] : null;
 
+    // Current change from previous close
     const priceChange = currentClose - prevClosePrice;
     const priceChangePercent = prevClosePrice > 0 ? (priceChange / prevClosePrice) * 100 : 0;
 
@@ -1106,11 +1166,13 @@ class IndicatorService {
     };
 
     const row = {
-      symbol: null,
+      // Meta info
+      symbol: null, // Will be set by caller
       indicatorDate: currentPrice.date,
       isIntraday: true,
       marketStatus: 'LIVE',
       
+      // Current price data (today's partial/live data)
       currentOpen: safeToFixed(currentOpen),
       currentHigh: safeToFixed(currentHigh),
       currentLow: safeToFixed(currentLow),
@@ -1120,11 +1182,13 @@ class IndicatorService {
       priceChange: safeToFixed(priceChange),
       priceChangePercent: safeToFixed(priceChangePercent),
       
+      // ML Features based on current partial data
       closePosition: safeToFixed(closePosition, 4),
       bodyRangeRatio: safeToFixed(bodyRangeRatio, 4),
       upperWickRatio: currentRange > 0 ? safeToFixed((currentHigh - Math.max(currentOpen, currentClose)) / currentRange, 4) : 0,
       lowerWickRatio: currentRange > 0 ? safeToFixed((Math.min(currentOpen, currentClose) - currentLow) / currentRange, 4) : 0,
       
+      // Delta indicators
       deltaRSI: safeToFixed(deltaRSI),
       deltaMACDHist: safeToFixed(deltaMACDHist, 4),
       deltaStochK: safeToFixed(deltaStochK),
@@ -1132,80 +1196,107 @@ class IndicatorService {
       deltaCCI: safeToFixed(deltaCCI),
       deltaMFI: safeToFixed(deltaMFI),
       
+      // SMA indicators (using current price in calculation)
       sma5: safeToFixed(indicators.sma5[i]),
       sma10: safeToFixed(indicators.sma10[i]),
       sma20: safeToFixed(indicators.sma20[i]),
       sma50: safeToFixed(indicators.sma50[i]),
       
+      // EMA indicators
       ema9: safeToFixed(ema9[i]),
       ema12: safeToFixed(indicators.ema12[i]),
       ema21: safeToFixed(ema21[i]),
       ema26: safeToFixed(indicators.ema26[i]),
       
+      // SMA Distance
       distanceFromSMA5: indicators.sma5[i] ? safeToFixed((currentClose - indicators.sma5[i]) / indicators.sma5[i] * 100, 4) : null,
       distanceFromSMA10: indicators.sma10[i] ? safeToFixed((currentClose - indicators.sma10[i]) / indicators.sma10[i] * 100, 4) : null,
       distanceFromSMA20: indicators.sma20[i] ? safeToFixed((currentClose - indicators.sma20[i]) / indicators.sma20[i] * 100, 4) : null,
-      distanceFromSMA50: indicators.sma50[i] ? parseFloat(((currentClose - indicators.sma50[i]) / indicators.sma50[i] * 100).toFixed(4)) : null,
+      distanceFromSMA50: indicators.sma50[i] ? safeToFixed((currentClose - indicators.sma50[i]) / indicators.sma50[i] * 100, 4) : null,
       
+      // Price vs SMAs (above/below)
       aboveSMA5: indicators.sma5[i] && currentClose > indicators.sma5[i] ? 1 : 0,
       aboveSMA10: indicators.sma10[i] && currentClose > indicators.sma10[i] ? 1 : 0,
       aboveSMA20: indicators.sma20[i] && currentClose > indicators.sma20[i] ? 1 : 0,
       aboveSMA50: indicators.sma50[i] && currentClose > indicators.sma50[i] ? 1 : 0,
       
-      rsi: indicators.rsi[i] ? parseFloat(indicators.rsi[i].toFixed(2)) : null,
+      // RSI
+      rsi: safeToFixed(indicators.rsi[i]),
       rsiOversold: indicators.rsi[i] && indicators.rsi[i] < 30 ? 1 : 0,
       rsiOverbought: indicators.rsi[i] && indicators.rsi[i] > 70 ? 1 : 0,
       rsiNeutral: indicators.rsi[i] && indicators.rsi[i] >= 30 && indicators.rsi[i] <= 70 ? 1 : 0,
       
-      macd: indicators.macd[i]?.MACD ? parseFloat(indicators.macd[i].MACD.toFixed(4)) : null,
-      macdSignal: indicators.macd[i]?.signal ? parseFloat(indicators.macd[i].signal.toFixed(4)) : null,
-      macdHistogram: indicators.macd[i]?.histogram ? parseFloat(indicators.macd[i].histogram.toFixed(4)) : null,
+      // MACD
+      macd: safeToFixed(indicators.macd[i]?.MACD, 4),
+      macdSignal: safeToFixed(indicators.macd[i]?.signal, 4),
+      macdHistogram: safeToFixed(indicators.macd[i]?.histogram, 4),
       macdBullish: indicators.macd[i] && indicators.macd[i].histogram > 0 ? 1 : 0,
-      macdCrossUp: indicators.macd[i] && indicators.macd[prevIdx] && indicators.macd[prevIdx].histogram <= 0 && indicators.macd[i].histogram > 0 ? 1 : 0,
-      macdCrossDown: indicators.macd[i] && indicators.macd[prevIdx] && indicators.macd[prevIdx].histogram >= 0 && indicators.macd[i].histogram < 0 ? 1 : 0,
+      macdGoldenCross: indicators.macd[i] && indicators.macd[prevIdx] && 
+        indicators.macd[prevIdx].MACD <= indicators.macd[prevIdx].signal && 
+        indicators.macd[i].MACD > indicators.macd[i].signal ? 1 : 0,
+      macdDeathCross: indicators.macd[i] && indicators.macd[prevIdx] && 
+        indicators.macd[prevIdx].MACD >= indicators.macd[prevIdx].signal && 
+        indicators.macd[i].MACD < indicators.macd[i].signal ? 1 : 0,
+      macdCrossUp: indicators.macd[i] && indicators.macd[prevIdx] && 
+        indicators.macd[prevIdx].histogram <= 0 && indicators.macd[i].histogram > 0 ? 1 : 0,
+      macdCrossDown: indicators.macd[i] && indicators.macd[prevIdx] && 
+        indicators.macd[prevIdx].histogram >= 0 && indicators.macd[i].histogram < 0 ? 1 : 0,
       
+      // Bollinger Bands
       bbUpper: safeToFixed(indicators.bb[i]?.upper),
       bbMiddle: safeToFixed(indicators.bb[i]?.middle),
       bbLower: safeToFixed(indicators.bb[i]?.lower),
       bbWidth: indicators.bb[i]?.middle ? safeToFixed((indicators.bb[i].upper - indicators.bb[i].lower) / indicators.bb[i].middle * 100, 4) : null,
-      bbPosition: (indicators.bb[i]?.upper && indicators.bb[i]?.lower && indicators.bb[i].upper !== indicators.bb[i].lower) 
-        ? safeToFixed((currentClose - indicators.bb[i].lower) / (indicators.bb[i].upper - indicators.bb[i].lower), 4) : null,
+      bbPosition: indicators.bb[i] && (indicators.bb[i].upper - indicators.bb[i].lower) > 0 ? safeToFixed((currentClose - indicators.bb[i].lower) / (indicators.bb[i].upper - indicators.bb[i].lower), 4) : null,
       nearBBUpper: indicators.bb[i] && currentClose > indicators.bb[i].upper * 0.98 ? 1 : 0,
       nearBBLower: indicators.bb[i] && currentClose < indicators.bb[i].lower * 1.02 ? 1 : 0,
       
+      // Stochastic
       stochK: safeToFixed(indicators.stoch[i]?.k),
       stochD: safeToFixed(indicators.stoch[i]?.d),
       stochOversold: indicators.stoch[i] && indicators.stoch[i].k < 20 ? 1 : 0,
       stochOverbought: indicators.stoch[i] && indicators.stoch[i].k > 80 ? 1 : 0,
       
+      // ADX
       adx: safeToFixed(indicators.adx[i]?.adx),
       plusDI: safeToFixed(indicators.adx[i]?.pdi),
       minusDI: safeToFixed(indicators.adx[i]?.mdi),
       strongTrend: indicators.adx[i] && indicators.adx[i].adx > 25 ? 1 : 0,
       bullishDI: indicators.adx[i] && indicators.adx[i].pdi > indicators.adx[i].mdi ? 1 : 0,
       
+      // ATR
       atr: safeToFixed(indicators.atr[i]),
       atrPercent: indicators.atr[i] && currentClose > 0 ? safeToFixed(indicators.atr[i] / currentClose * 100, 4) : null,
       
+      // OBV
       obv: indicators.obv[i] || null,
       obvTrend: indicators.obv[i] && indicators.obv[prevIdx] && indicators.obv[i] > indicators.obv[prevIdx] ? 1 : 0,
       
+      // Williams %R
       williamsR: safeToFixed(indicators.williamsR[i]),
       williamsROversold: indicators.williamsR[i] && indicators.williamsR[i] < -80 ? 1 : 0,
       williamsROverbought: indicators.williamsR[i] && indicators.williamsR[i] > -20 ? 1 : 0,
       
+      // CCI
       cci: safeToFixed(indicators.cci[i]),
       cciOversold: indicators.cci[i] && indicators.cci[i] < -100 ? 1 : 0,
       cciOverbought: indicators.cci[i] && indicators.cci[i] > 100 ? 1 : 0,
       
+      // MFI
       mfi: safeToFixed(indicators.mfi[i]),
       mfiOversold: indicators.mfi[i] && indicators.mfi[i] < 20 ? 1 : 0,
       mfiOverbought: indicators.mfi[i] && indicators.mfi[i] > 80 ? 1 : 0,
       
+      // ROC
       roc: safeToFixed(indicators.roc[i], 4),
+      
+      // Momentum
       momentum: safeToFixed(indicators.momentum[i]),
+      
+      // TRIX
       trix: safeToFixed(trix[i], 4),
       
+      // Ichimoku
       tenkanSen: safeToFixed(ichimoku[i]?.conversion),
       kijunSen: safeToFixed(ichimoku[i]?.base),
       senkouSpanA: safeToFixed(ichimoku[i]?.spanA),
@@ -1213,33 +1304,41 @@ class IndicatorService {
       aboveCloud: ichimoku[i] && currentClose > Math.max(ichimoku[i].spanA || 0, ichimoku[i].spanB || 0) ? 1 : 0,
       belowCloud: ichimoku[i] && currentClose < Math.min(ichimoku[i].spanA || Infinity, ichimoku[i].spanB || Infinity) ? 1 : 0,
       
+      // Parabolic SAR
       psar: safeToFixed(psar[i]),
       psarBullish: psar[i] && currentClose > psar[i] ? 1 : 0,
       
+      // SuperTrend
       supertrend: safeToFixed(supertrend[i]),
       supertrendBullish: supertrend[i] && currentClose > supertrend[i] ? 1 : 0,
       
+      // VWAP
       vwap: safeToFixed(vwap[i]),
       aboveVWAP: vwap[i] && currentClose > vwap[i] ? 1 : 0,
       
+      // Price Position (within recent range)
       pricePosition: safeToFixed(indicators.pricePosition[i]),
       
+      // Volume Ratio
       volumeRatio: safeToFixed(indicators.volumeRatio[i], 4),
       highVolume: indicators.volumeRatio[i] && indicators.volumeRatio[i] > 1.5 ? 1 : 0,
       
+      // Candlestick patterns (current candle)
       bodySize: safeToFixed(bodySize),
       upperWick: safeToFixed(currentHigh - Math.max(currentOpen, currentClose)),
       lowerWick: safeToFixed(Math.min(currentOpen, currentClose) - currentLow),
       isBullishCandle: currentClose > currentOpen ? 1 : 0,
       isDoji: bodySize < currentRange * 0.1 ? 1 : 0,
       
+      // Price gaps (comparing current open to previous close)
       gapUp: currentOpen > prevClosePrice ? 1 : 0,
       gapDown: currentOpen < prevClosePrice ? 1 : 0,
       gapPercent: prevClosePrice > 0 ? safeToFixed((currentOpen - prevClosePrice) / prevClosePrice * 100, 4) : 0,
       
+      // Returns (based on current close)
       return1d: safeToFixed(priceChangePercent, 4),
-      return3d: (i >= 3 && prices[i - 3]?.close) ? safeToFixed((currentClose - prices[i - 3].close) / prices[i - 3].close * 100, 4) : null,
-      return5d: (i >= 5 && prices[i - 5]?.close) ? safeToFixed((currentClose - prices[i - 5].close) / prices[i - 5].close * 100, 4) : null,
+      return3d: i >= 3 && prices[i - 3]?.close ? safeToFixed((currentClose - prices[i - 3].close) / prices[i - 3].close * 100, 4) : null,
+      return5d: i >= 5 && prices[i - 5]?.close ? safeToFixed((currentClose - prices[i - 5].close) / prices[i - 5].close * 100, 4) : null,
     };
 
     return row;
