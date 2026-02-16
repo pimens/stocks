@@ -769,6 +769,80 @@ class IndicatorService {
         return1d: i >= 2 ? parseFloat(((prices[i - 1].close - prices[i - 2].close) / prices[i - 2].close * 100).toFixed(4)) : null,
         return3d: i >= 4 ? parseFloat(((prices[i - 1].close - prices[i - 4].close) / prices[i - 4].close * 100).toFixed(4)) : null,
         return5d: i >= 6 ? parseFloat(((prices[i - 1].close - prices[i - 6].close) / prices[i - 6].close * 100).toFixed(4)) : null,
+        
+        // ============ ADVANCED BULLISH DETECTION INDICATORS ============
+        
+        // RSI Momentum
+        rsiRising: (prevIdx >= 1 && indicators.rsi[prevIdx] && indicators.rsi[prevIdx - 1] &&
+          indicators.rsi[prevIdx] > indicators.rsi[prevIdx - 1]) ? 1 : 0,
+        rsiExitOversold: (prevIdx >= 1 && indicators.rsi[prevIdx] && indicators.rsi[prevIdx - 1] &&
+          indicators.rsi[prevIdx - 1] < 30 && indicators.rsi[prevIdx] >= 30) ? 1 : 0,
+        rsiBullishZone: (indicators.rsi[prevIdx] && indicators.rsi[prevIdx] >= 30 && indicators.rsi[prevIdx] <= 50) ? 1 : 0,
+        
+        // Stochastic signals
+        stochGoldenCross: (prevIdx >= 1 && indicators.stoch[prevIdx] && indicators.stoch[prevIdx - 1] &&
+          indicators.stoch[prevIdx - 1].k <= indicators.stoch[prevIdx - 1].d &&
+          indicators.stoch[prevIdx].k > indicators.stoch[prevIdx].d) ? 1 : 0,
+        stochExitOversold: (prevIdx >= 1 && indicators.stoch[prevIdx] && indicators.stoch[prevIdx - 1] &&
+          indicators.stoch[prevIdx - 1].k < 20 && indicators.stoch[prevIdx].k >= 20) ? 1 : 0,
+        
+        // Volume signals
+        bullishVolume: (indicators.volumeRatio[prevIdx] && indicators.volumeRatio[prevIdx] > 1.2 && 
+          prices[prevIdx].close > prices[prevIdx].open) ? 1 : 0,
+        volumeSpike: indicators.volumeRatio[prevIdx] && indicators.volumeRatio[prevIdx] > 2 ? 1 : 0,
+        
+        // Bollinger Band signals
+        nearLowerBB: (indicators.bb[prevIdx] && prevClose <= indicators.bb[prevIdx].lower * 1.02) ? 1 : 0,
+        bouncingFromLowerBB: (prevIdx >= 1 && indicators.bb[prevIdx] && indicators.bb[prevIdx - 1] &&
+          prices[prevIdx - 1].close <= indicators.bb[prevIdx - 1].lower &&
+          prices[prevIdx].close > indicators.bb[prevIdx].lower) ? 1 : 0,
+        bbSqueeze: (indicators.bb[prevIdx] && 
+          ((indicators.bb[prevIdx].upper - indicators.bb[prevIdx].lower) / indicators.bb[prevIdx].middle * 100) < 5) ? 1 : 0,
+        
+        // ADX signals
+        adxRising: (prevIdx >= 1 && indicators.adx[prevIdx] && indicators.adx[prevIdx - 1] &&
+          indicators.adx[prevIdx].adx > indicators.adx[prevIdx - 1].adx) ? 1 : 0,
+        bullishDICross: (prevIdx >= 1 && indicators.adx[prevIdx] && indicators.adx[prevIdx - 1] &&
+          indicators.adx[prevIdx - 1].pdi <= indicators.adx[prevIdx - 1].mdi &&
+          indicators.adx[prevIdx].pdi > indicators.adx[prevIdx].mdi) ? 1 : 0,
+        
+        // Candlestick patterns
+        hammerCandle: (prices[prevIdx].high - prices[prevIdx].low > 0 &&
+          (Math.min(prices[prevIdx].open, prices[prevIdx].close) - prices[prevIdx].low) > 
+          (prices[prevIdx].high - prices[prevIdx].low) * 0.6 &&
+          Math.abs(prices[prevIdx].close - prices[prevIdx].open) < 
+          (prices[prevIdx].high - prices[prevIdx].low) * 0.3) ? 1 : 0,
+        bullishEngulfing: (prevIdx >= 1 && 
+          prices[prevIdx - 1].close < prices[prevIdx - 1].open &&
+          prices[prevIdx].close > prices[prevIdx].open &&
+          prices[prevIdx].close > prices[prevIdx - 1].open &&
+          prices[prevIdx].open < prices[prevIdx - 1].close) ? 1 : 0,
+        
+        // Bullish score (0-10)
+        bullishScore: (() => {
+          let score = 0;
+          if (indicators.rsi[prevIdx] < 40) score += 1;
+          if (prevIdx >= 1 && indicators.rsi[prevIdx] > indicators.rsi[prevIdx - 1]) score += 1;
+          if (prevIdx >= 1 && indicators.macd[prevIdx]?.histogram > indicators.macd[prevIdx - 1]?.histogram) score += 1;
+          if (indicators.macd[prevIdx]?.MACD > indicators.macd[prevIdx]?.signal) score += 1;
+          if (indicators.volumeRatio[prevIdx] > 1.2) score += 1;
+          if (prevIdx >= 1 && indicators.obv[prevIdx] > indicators.obv[prevIdx - 1]) score += 1;
+          if (indicators.adx[prevIdx]?.pdi > indicators.adx[prevIdx]?.mdi) score += 1;
+          if (prices[prevIdx].close > prices[prevIdx].open) score += 1;
+          if (indicators.stoch[prevIdx]?.k < 50) score += 1;
+          if (prevClose > indicators.sma20[prevIdx]) score += 1;
+          return score;
+        })(),
+        
+        // Composite signals
+        oversoldBounce: ((indicators.rsi[prevIdx] < 35 || indicators.stoch[prevIdx]?.k < 25) &&
+          prices[prevIdx].close > prices[prevIdx].open &&
+          indicators.volumeRatio[prevIdx] > 1) ? 1 : 0,
+        
+        momentumShift: (prevIdx >= 1 && 
+          indicators.macd[prevIdx]?.histogram > indicators.macd[prevIdx - 1]?.histogram &&
+          indicators.rsi[prevIdx] > indicators.rsi[prevIdx - 1] &&
+          indicators.adx[prevIdx]?.pdi > indicators.adx[prevIdx]?.mdi) ? 1 : 0,
       };
 
       dataset.push(row);
@@ -1120,6 +1194,92 @@ class IndicatorService {
       return1d: prevIdx >= 2 ? parseFloat(((prices[prevIdx].close - prices[prevPrevIdx].close) / prices[prevPrevIdx].close * 100).toFixed(4)) : null,
       return3d: prevIdx >= 4 ? parseFloat(((prices[prevIdx].close - prices[prevIdx - 3].close) / prices[prevIdx - 3].close * 100).toFixed(4)) : null,
       return5d: prevIdx >= 6 ? parseFloat(((prices[prevIdx].close - prices[prevIdx - 5].close) / prices[prevIdx - 5].close * 100).toFixed(4)) : null,
+      
+      // ============ ADVANCED BULLISH DETECTION INDICATORS ============
+      
+      // RSI Momentum: RSI naik dari hari sebelumnya
+      rsiRising: (prevPrevIdx >= 0 && indicators.rsi[prevIdx] && indicators.rsi[prevPrevIdx] &&
+        indicators.rsi[prevIdx] > indicators.rsi[prevPrevIdx]) ? 1 : 0,
+      // RSI keluar dari oversold (cross di atas 30)
+      rsiExitOversold: (prevPrevIdx >= 0 && indicators.rsi[prevIdx] && indicators.rsi[prevPrevIdx] &&
+        indicators.rsi[prevPrevIdx] < 30 && indicators.rsi[prevIdx] >= 30) ? 1 : 0,
+      // RSI dalam zona bullish awal (30-50) - potensi naik
+      rsiBullishZone: (indicators.rsi[prevIdx] && indicators.rsi[prevIdx] >= 30 && indicators.rsi[prevIdx] <= 50) ? 1 : 0,
+      
+      // Stochastic Golden Cross (%K cross di atas %D)
+      stochGoldenCross: (prevPrevIdx >= 0 && indicators.stoch[prevIdx] && indicators.stoch[prevPrevIdx] &&
+        indicators.stoch[prevPrevIdx].k <= indicators.stoch[prevPrevIdx].d &&
+        indicators.stoch[prevIdx].k > indicators.stoch[prevIdx].d) ? 1 : 0,
+      // Stochastic keluar dari oversold
+      stochExitOversold: (prevPrevIdx >= 0 && indicators.stoch[prevIdx] && indicators.stoch[prevPrevIdx] &&
+        indicators.stoch[prevPrevIdx].k < 20 && indicators.stoch[prevIdx].k >= 20) ? 1 : 0,
+      
+      // Volume surge dengan harga naik (bullish volume)
+      bullishVolume: (indicators.volumeRatio[prevIdx] && indicators.volumeRatio[prevIdx] > 1.2 && 
+        prices[prevIdx].close > prices[prevIdx].open) ? 1 : 0,
+      // Volume spike (>2x average)
+      volumeSpike: indicators.volumeRatio[prevIdx] && indicators.volumeRatio[prevIdx] > 2 ? 1 : 0,
+      
+      // Price near lower Bollinger Band (potential bounce zone)
+      nearLowerBB: (indicators.bb[prevIdx] && prevClose <= indicators.bb[prevIdx].lower * 1.02) ? 1 : 0,
+      // Price bouncing from lower BB
+      bouncingFromLowerBB: (prevPrevIdx >= 0 && indicators.bb[prevIdx] && indicators.bb[prevPrevIdx] &&
+        prices[prevPrevIdx].close <= indicators.bb[prevPrevIdx].lower &&
+        prices[prevIdx].close > indicators.bb[prevIdx].lower) ? 1 : 0,
+      // BB Width sempit (potensi breakout)
+      bbSqueeze: (indicators.bb[prevIdx] && 
+        ((indicators.bb[prevIdx].upper - indicators.bb[prevIdx].lower) / indicators.bb[prevIdx].middle * 100) < 5) ? 1 : 0,
+      
+      // ADX Rising (trend strengthening)
+      adxRising: (prevPrevIdx >= 0 && indicators.adx[prevIdx] && indicators.adx[prevPrevIdx] &&
+        indicators.adx[prevIdx].adx > indicators.adx[prevPrevIdx].adx) ? 1 : 0,
+      // Bullish DI Cross (+DI cross di atas -DI)
+      bullishDICross: (prevPrevIdx >= 0 && indicators.adx[prevIdx] && indicators.adx[prevPrevIdx] &&
+        indicators.adx[prevPrevIdx].pdi <= indicators.adx[prevPrevIdx].mdi &&
+        indicators.adx[prevIdx].pdi > indicators.adx[prevIdx].mdi) ? 1 : 0,
+      
+      // Hammer/Bullish Reversal Candle Pattern
+      hammerCandle: (prices[prevIdx].high - prices[prevIdx].low > 0 &&
+        (Math.min(prices[prevIdx].open, prices[prevIdx].close) - prices[prevIdx].low) > 
+        (prices[prevIdx].high - prices[prevIdx].low) * 0.6 &&
+        Math.abs(prices[prevIdx].close - prices[prevIdx].open) < 
+        (prices[prevIdx].high - prices[prevIdx].low) * 0.3) ? 1 : 0,
+      // Bullish engulfing
+      bullishEngulfing: (prevPrevIdx >= 0 && 
+        prices[prevPrevIdx].close < prices[prevPrevIdx].open && // Previous bearish
+        prices[prevIdx].close > prices[prevIdx].open && // Current bullish
+        prices[prevIdx].close > prices[prevPrevIdx].open && // Body engulfs
+        prices[prevIdx].open < prices[prevPrevIdx].close) ? 1 : 0,
+      
+      // Multi-indicator bullish confluence score (0-10)
+      bullishScore: (() => {
+        let score = 0;
+        // RSI bullish signals
+        if (indicators.rsi[prevIdx] < 40) score += 1; // Not overbought
+        if (indicators.rsi[prevIdx] > indicators.rsi[prevPrevIdx]) score += 1; // Rising RSI
+        // MACD bullish signals
+        if (indicators.macd[prevIdx]?.histogram > indicators.macd[prevPrevIdx]?.histogram) score += 1; // Histogram improving
+        if (indicators.macd[prevIdx]?.MACD > indicators.macd[prevIdx]?.signal) score += 1; // Bullish MACD
+        // Volume confirmation
+        if (indicators.volumeRatio[prevIdx] > 1.2) score += 1; // Above average volume
+        if (indicators.obv[prevIdx] > indicators.obv[prevPrevIdx]) score += 1; // OBV rising
+        // Trend indicators
+        if (indicators.adx[prevIdx]?.pdi > indicators.adx[prevIdx]?.mdi) score += 1; // Bullish DI
+        if (prices[prevIdx].close > prices[prevIdx].open) score += 1; // Bullish candle
+        // Price position
+        if (indicators.stoch[prevIdx]?.k < 50) score += 1; // Not overbought stoch
+        if (prevClose > indicators.sma20[prevIdx]) score += 1; // Above SMA20
+        return score;
+      })(),
+      
+      // Composite signals
+      oversoldBounce: ((indicators.rsi[prevIdx] < 35 || indicators.stoch[prevIdx]?.k < 25) &&
+        prices[prevIdx].close > prices[prevIdx].open && // Bullish candle
+        indicators.volumeRatio[prevIdx] > 1) ? 1 : 0,
+      
+      momentumShift: (indicators.macd[prevIdx]?.histogram > indicators.macd[prevPrevIdx]?.histogram &&
+        indicators.rsi[prevIdx] > indicators.rsi[prevPrevIdx] &&
+        indicators.adx[prevIdx]?.pdi > indicators.adx[prevIdx]?.mdi) ? 1 : 0,
     };
 
     return row;

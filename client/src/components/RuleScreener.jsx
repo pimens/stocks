@@ -131,6 +131,44 @@ const ALL_FEATURES = {
   return3d: { label: 'Return 3D', group: 'returns', desc: 'Return 3 hari sebelumnya (%)' },
   return5d: { label: 'Return 5D', group: 'returns', desc: 'Return 5 hari sebelumnya (%)' },
 
+  // ============ ADVANCED BULLISH SIGNALS ============
+  // RSI Advanced
+  rsiRising: { label: 'RSI Rising', group: 'bullish', desc: '1 jika RSI naik dari hari sebelumnya' },
+  rsiExitOversold: { label: 'RSI Exit Oversold', group: 'bullish', desc: '1 jika RSI cross di atas 30 (keluar oversold)' },
+  rsiBullishZone: { label: 'RSI Bullish Zone', group: 'bullish', desc: '1 jika RSI 30-50 (zona potensi naik)' },
+  
+  // Stochastic Advanced
+  stochGoldenCross: { label: 'Stoch Golden Cross', group: 'bullish', desc: '1 jika %K cross di atas %D' },
+  stochExitOversold: { label: 'Stoch Exit Oversold', group: 'bullish', desc: '1 jika %K cross di atas 20' },
+  
+  // Volume Advanced
+  bullishVolume: { label: 'Bullish Volume', group: 'bullish', desc: '1 jika volume tinggi + candle hijau' },
+  volumeSpike: { label: 'Volume Spike', group: 'bullish', desc: '1 jika volume > 2x average' },
+  
+  // Bollinger Band Advanced
+  nearLowerBB: { label: 'Near Lower BB', group: 'bullish', desc: '1 jika harga dekat lower BB (bounce zone)' },
+  bouncingFromLowerBB: { label: 'Bouncing Lower BB', group: 'bullish', desc: '1 jika memantul dari lower BB' },
+  bbSqueeze: { label: 'BB Squeeze', group: 'bullish', desc: '1 jika BB sempit (potensi breakout)' },
+  
+  // ADX Advanced
+  adxRising: { label: 'ADX Rising', group: 'bullish', desc: '1 jika ADX naik (trend menguat)' },
+  bullishDICross: { label: 'Bullish DI Cross', group: 'bullish', desc: '1 jika +DI cross di atas -DI' },
+  
+  // MACD Advanced
+  macdNearGoldenCross: { label: 'MACD Near Golden Cross', group: 'bullish', desc: '1 jika MACD mendekati signal (siap cross)' },
+  macdHistogramConverging: { label: 'MACD Hist Converging', group: 'bullish', desc: '1 jika histogram mendekati 0' },
+  macdHistogramRising: { label: 'MACD Hist Rising', group: 'bullish', desc: '1 jika histogram naik 2 hari berturut' },
+  macdDistanceToSignal: { label: 'MACD Distance to Signal', group: 'bullish', desc: 'Jarak MACD ke Signal line (%)' },
+  
+  // Candlestick Patterns
+  hammerCandle: { label: 'Hammer Candle', group: 'bullish', desc: '1 jika pola hammer (reversal bullish)' },
+  bullishEngulfing: { label: 'Bullish Engulfing', group: 'bullish', desc: '1 jika pola bullish engulfing' },
+  
+  // Composite Scores
+  bullishScore: { label: 'Bullish Score (0-10)', group: 'bullish', desc: 'Skor komposit bullish dari multi-indikator' },
+  oversoldBounce: { label: 'Oversold Bounce', group: 'bullish', desc: '1 jika oversold + candle hijau + volume' },
+  momentumShift: { label: 'Momentum Shift', group: 'bullish', desc: '1 jika MACD, RSI, DI semua bullish' },
+
   // Price Data (for raw comparison)
   close: { label: 'Close', group: 'price', desc: 'Harga Close' },
   open: { label: 'Open', group: 'price', desc: 'Harga Open' },
@@ -158,6 +196,7 @@ const FEATURE_GROUPS = {
   momentum: { label: '🚀 Momentum', color: 'violet' },
   candlestick: { label: '🕯️ Candlestick', color: 'rose' },
   returns: { label: '📆 Returns', color: 'sky' },
+  bullish: { label: '🔥 Bullish Signals', color: 'green' },
   price: { label: '💵 Price Data', color: 'gray' },
 }
 
@@ -173,6 +212,74 @@ const OPERATORS = [
 
 // Preset screening rules
 const PRESET_RULES = {
+  // ============ RECOMMENDED: BEST BULLISH DETECTION PRESETS ============
+  bullish_high_confidence: {
+    name: '🔥 Bullish High Confidence',
+    desc: '⭐ RECOMMENDED: Multi-konfirmasi bullish, risiko rendah!',
+    rules: [
+      { leftFeature: 'bullishScore', operator: '>=', compareType: 'constant', rightValue: 7 },
+      { leftFeature: 'macdHistogramRising', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'rsiRising', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'bullishVolume', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'isBullishCandle', operator: '==', compareType: 'constant', rightValue: 1 },
+    ]
+  },
+  early_reversal: {
+    name: '🌅 Early Reversal Detection',
+    desc: '⭐ RECOMMENDED: Deteksi dini reversal dari oversold',
+    rules: [
+      { leftFeature: 'rsiExitOversold', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'stochGoldenCross', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'deltaMACDHist', operator: '>', compareType: 'constant', rightValue: 0 },
+      { leftFeature: 'isBullishCandle', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'volumeRatio', operator: '>', compareType: 'constant', rightValue: 1 },
+    ]
+  },
+  momentum_shift: {
+    name: '🔄 Momentum Shift',
+    desc: '⭐ RECOMMENDED: Semua indikator momentum bullish',
+    rules: [
+      { leftFeature: 'momentumShift', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'bullishScore', operator: '>=', compareType: 'constant', rightValue: 6 },
+      { leftFeature: 'rsi', operator: '<', compareType: 'constant', rightValue: 60 },
+      { leftFeature: 'volumeRatio', operator: '>', compareType: 'constant', rightValue: 1 },
+    ]
+  },
+  macd_near_golden: {
+    name: '🔮 MACD Near Golden Cross',
+    desc: '⭐ RECOMMENDED: Entry sebelum golden cross!',
+    rules: [
+      { leftFeature: 'macdNearGoldenCross', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'macdHistogramRising', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'rsiRising', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'rsi', operator: '>', compareType: 'constant', rightValue: 35 },
+      { leftFeature: 'rsi', operator: '<', compareType: 'constant', rightValue: 65 },
+      { leftFeature: 'volumeRatio', operator: '>', compareType: 'constant', rightValue: 0.8 },
+    ]
+  },
+  bounce_from_support: {
+    name: '📈 Bounce from Support',
+    desc: '⭐ RECOMMENDED: Memantul dari support dengan konfirmasi',
+    rules: [
+      { leftFeature: 'bouncingFromLowerBB', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'rsi', operator: '<', compareType: 'constant', rightValue: 40 },
+      { leftFeature: 'deltaRSI', operator: '>', compareType: 'constant', rightValue: 0 },
+      { leftFeature: 'isBullishCandle', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'volumeRatio', operator: '>', compareType: 'constant', rightValue: 1 },
+    ]
+  },
+  di_crossover_bullish: {
+    name: '💪 DI Bullish Crossover',
+    desc: '⭐ RECOMMENDED: +DI cross -DI dengan trend menguat',
+    rules: [
+      { leftFeature: 'bullishDICross', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'adxRising', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'adx', operator: '>', compareType: 'constant', rightValue: 20 },
+      { leftFeature: 'rsi', operator: '>', compareType: 'constant', rightValue: 45 },
+      { leftFeature: 'volumeRatio', operator: '>', compareType: 'constant', rightValue: 1 },
+    ]
+  },
+  // ============ ADDITIONAL PRESETS ============
   momentum_breakout: {
     name: '🚀 Momentum Breakout',
     desc: 'Saham dengan momentum kuat dan volume tinggi',
@@ -189,10 +296,9 @@ const PRESET_RULES = {
     name: '📉 Oversold Bounce',
     desc: 'Saham oversold dengan tanda-tanda reversal',
     rules: [
-      { leftFeature: 'rsi', operator: '<', compareType: 'constant', rightValue: 30 },
-      { leftFeature: 'stochK', operator: '<', compareType: 'constant', rightValue: 20 },
-      { leftFeature: 'deltaRSI', operator: '>', compareType: 'constant', rightValue: 0 },
-      { leftFeature: 'priceBelowLowerBB', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'oversoldBounce', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'rsiRising', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'deltaMACDHist', operator: '>', compareType: 'constant', rightValue: 0 },
     ]
   },
   trend_following: {
@@ -210,41 +316,38 @@ const PRESET_RULES = {
     name: '📦 Volume Breakout',
     desc: 'Saham dengan volume explosion',
     rules: [
-      { leftFeature: 'volumeRatio', operator: '>', compareType: 'constant', rightValue: 2 },
-      { leftFeature: 'highVolume', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'volumeSpike', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'bullishVolume', operator: '==', compareType: 'constant', rightValue: 1 },
       { leftFeature: 'obvTrend', operator: '==', compareType: 'constant', rightValue: 1 },
-      { leftFeature: 'isBullishCandle', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'closePosition', operator: '>', compareType: 'constant', rightValue: 0.6 },
     ]
   },
-  macd_crossover: {
-    name: '📶 MACD Bullish',
-    desc: 'MACD bullish crossover dengan konfirmasi',
+  macd_golden_cross: {
+    name: '📶 MACD Golden Cross',
+    desc: 'MACD sudah golden cross',
     rules: [
-      { leftFeature: 'macdBullish', operator: '==', compareType: 'constant', rightValue: 1 },
-      { leftFeature: 'macdHistogram', operator: '>', compareType: 'constant', rightValue: 0 },
-      { leftFeature: 'deltaMACDHist', operator: '>', compareType: 'constant', rightValue: 0 },
-      { leftFeature: 'rsi', operator: '>', compareType: 'constant', rightValue: 50 },
-    ]
-  },
-  macd_near_golden: {
-    name: '🔮 MACD Near Golden Cross',
-    desc: 'Saham mendekati golden cross - entry sebelum breakout!',
-    rules: [
-      { leftFeature: 'macdNearGoldenCross', operator: '==', compareType: 'constant', rightValue: 1 },
-      { leftFeature: 'macdHistogramRising', operator: '==', compareType: 'constant', rightValue: 1 },
-      { leftFeature: 'deltaMACDHist', operator: '>', compareType: 'constant', rightValue: 0 },
-      { leftFeature: 'rsi', operator: '>', compareType: 'constant', rightValue: 40 },
-      { leftFeature: 'rsi', operator: '<', compareType: 'constant', rightValue: 65 },
-    ]
-  },
-  macd_converging: {
-    name: '⚡ MACD Converging',
-    desc: 'MACD histogram sangat dekat ke golden cross',
-    rules: [
-      { leftFeature: 'macdHistogramConverging', operator: '==', compareType: 'constant', rightValue: 1 },
-      { leftFeature: 'deltaMACDHist', operator: '>', compareType: 'constant', rightValue: 0 },
+      { leftFeature: 'macdGoldenCross', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'rsi', operator: '>', compareType: 'constant', rightValue: 45 },
       { leftFeature: 'volumeRatio', operator: '>', compareType: 'constant', rightValue: 1 },
-      { leftFeature: 'priceAboveSMA20', operator: '==', compareType: 'constant', rightValue: 1 },
+    ]
+  },
+  candlestick_reversal: {
+    name: '🕯️ Candlestick Reversal',
+    desc: 'Pola candle reversal bullish',
+    rules: [
+      { leftFeature: 'hammerCandle', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'rsi', operator: '<', compareType: 'constant', rightValue: 40 },
+      { leftFeature: 'nearLowerBB', operator: '==', compareType: 'constant', rightValue: 1 },
+    ]
+  },
+  bb_squeeze_breakout: {
+    name: '🎯 BB Squeeze Breakout',
+    desc: 'Bollinger Band sempit siap breakout',
+    rules: [
+      { leftFeature: 'bbSqueeze', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'deltaMACDHist', operator: '>', compareType: 'constant', rightValue: 0 },
+      { leftFeature: 'volumeRatio', operator: '>', compareType: 'constant', rightValue: 1.5 },
+      { leftFeature: 'isBullishCandle', operator: '==', compareType: 'constant', rightValue: 1 },
     ]
   },
   gap_up_strong: {
