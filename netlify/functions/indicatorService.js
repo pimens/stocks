@@ -3,6 +3,42 @@ const {
 } = require('technicalindicators');
 
 class IndicatorService {
+  
+  /**
+   * Resample daily OHLCV data to higher timeframe
+   * @param {Array} prices - Array of daily OHLCV data
+   * @param {number} timeframe - Number of days to aggregate (1=daily, 3=3-day, 5=weekly, etc.)
+   * @returns {Array} Resampled OHLCV data
+   */
+  resampleToTimeframe(prices, timeframe = 1) {
+    if (timeframe <= 1) return prices;
+    
+    const resampled = [];
+    
+    for (let i = 0; i < prices.length; i += timeframe) {
+      const chunk = prices.slice(i, Math.min(i + timeframe, prices.length));
+      if (chunk.length === 0) continue;
+      
+      // Aggregate OHLCV for the timeframe period
+      const aggregated = {
+        date: chunk[chunk.length - 1].date, // Use last date in the period
+        open: chunk[0].open, // First open
+        high: Math.max(...chunk.map(p => p.high)), // Highest high
+        low: Math.min(...chunk.map(p => p.low)), // Lowest low
+        close: chunk[chunk.length - 1].close, // Last close
+        volume: chunk.reduce((sum, p) => sum + (p.volume || 0), 0), // Sum of volumes
+        // Keep original dates for reference
+        startDate: chunk[0].date,
+        endDate: chunk[chunk.length - 1].date,
+        daysInPeriod: chunk.length
+      };
+      
+      resampled.push(aggregated);
+    }
+    
+    return resampled;
+  }
+
   // Calculate Simple Moving Average
   calculateSMA(prices, period = 20) {
     const closes = prices.map(p => p.close);
@@ -906,14 +942,18 @@ class IndicatorService {
 
   // Get indicator data for a specific date (H-1 data for predicting date H)
   // targetDate: the date we want to predict (H)
+  // timeframe: aggregate daily data to N-day candles (1=daily, 3=3-day, 5=weekly, etc.)
   // Returns indicators from the day before (H-1)
-  getIndicatorsForDate(prices, targetDate) {
-    const indicators = this.calculateIndicatorsForRegression(prices);
+  getIndicatorsForDate(prices, targetDate, timeframe = 1) {
+    // Resample data to specified timeframe
+    const resampledPrices = this.resampleToTimeframe(prices, timeframe);
+    
+    const indicators = this.calculateIndicatorsForRegression(resampledPrices);
     
     const targetDateStr = new Date(targetDate).toISOString().split('T')[0];
-    const lastPriceDate = new Date(prices[prices.length - 1].date).toISOString().split('T')[0];
+    const lastPriceDate = new Date(resampledPrices[resampledPrices.length - 1].date).toISOString().split('T')[0];
     const targetDateObj = new Date(targetDate);
-    const lastPriceDateObj = new Date(prices[prices.length - 1].date);
+    const lastPriceDateObj = new Date(resampledPrices[resampledPrices.length - 1].date);
     
     let targetIdx = -1;
     let isFutureDate = false;
@@ -922,22 +962,31 @@ class IndicatorService {
     if (targetDateObj > lastPriceDateObj) {
       // For future dates, use the last available data as "today" (H)
       // and calculate indicators from H-1
-      targetIdx = prices.length - 1;
+      targetIdx = resampledPrices.length - 1;
       isFutureDate = true;
     } else {
       // Find the index of target date (H)
-      for (let i = 0; i < prices.length; i++) {
-        const priceDate = new Date(prices[i].date).toISOString().split('T')[0];
+      for (let i = 0; i < resampledPrices.length; i++) {
+        const priceDate = new Date(resampledPrices[i].date).toISOString().split('T')[0];
         if (priceDate === targetDateStr) {
           targetIdx = i;
           break;
+        }
+        // For resampled data, also check if target falls within the period
+        if (resampledPrices[i].startDate && resampledPrices[i].endDate) {
+          const startDate = new Date(resampledPrices[i].startDate).toISOString().split('T')[0];
+          const endDate = new Date(resampledPrices[i].endDate).toISOString().split('T')[0];
+          if (targetDateStr >= startDate && targetDateStr <= endDate) {
+            targetIdx = i;
+            break;
+          }
         }
       }
 
       // If target date not found, find the nearest date after
       if (targetIdx === -1) {
-        for (let i = 0; i < prices.length; i++) {
-          const priceDate = new Date(prices[i].date);
+        for (let i = 0; i < resampledPrices.length; i++) {
+          const priceDate = new Date(resampledPrices[i].date);
           if (priceDate >= targetDateObj) {
             targetIdx = i;
             break;
@@ -956,10 +1005,10 @@ class IndicatorService {
     const prevIdx = isFutureDate ? i : i - 1;  // For future: use last day as H-1
     const prevPrevIdx = isFutureDate ? i - 1 : i - 2;
     
-    const prevClose = prices[prevIdx].close;
-    const prevHigh = prices[prevIdx].high;
-    const prevLow = prices[prevIdx].low;
-    const prevOpen = prices[prevIdx].open;
+    const prevClose = resampledPrices[prevIdx].close;
+    const prevHigh = resampledPrices[prevIdx].high;
+    const prevLow = resampledPrices[prevIdx].low;
+    const prevOpen = resampledPrices[prevIdx].open;
     const prevRange = prevHigh - prevLow;
     
     // Close Position
@@ -990,22 +1039,23 @@ class IndicatorService {
 
     // Also get actual data for target date if available (for verification)
     const actualData = {
-      date: prices[i].date,
-      open: prices[i].open,
-      high: prices[i].high,
-      low: prices[i].low,
-      close: prices[i].close,
-      volume: prices[i].volume,
-      priceChange: prices[i].close - prevClose,
-      priceChangePercent: ((prices[i].close - prevClose) / prevClose) * 100
+      date: resampledPrices[i].date,
+      open: resampledPrices[i].open,
+      high: resampledPrices[i].high,
+      low: resampledPrices[i].low,
+      close: resampledPrices[i].close,
+      volume: resampledPrices[i].volume,
+      priceChange: resampledPrices[i].close - prevClose,
+      priceChangePercent: ((resampledPrices[i].close - prevClose) / prevClose) * 100
     };
 
     const row = {
       // Meta info
       symbol: null, // Will be set by caller
-      targetDate: isFutureDate ? targetDate : prices[i].date,
-      indicatorDate: prices[prevIdx].date,
+      targetDate: isFutureDate ? targetDate : resampledPrices[i].date,
+      indicatorDate: resampledPrices[prevIdx].date,
       isFutureDate: isFutureDate,
+      timeframe: timeframe, // Include timeframe in response
       
       // Actual data for verification (if available) - not available for future dates
       actualData: isFutureDate ? null : actualData,
@@ -1180,20 +1230,20 @@ class IndicatorService {
       highVolume: indicators.volumeRatio[prevIdx] && indicators.volumeRatio[prevIdx] > 1.5 ? 1 : 0,
       
       // Candlestick patterns
-      bodySize: parseFloat(Math.abs(prices[prevIdx].close - prices[prevIdx].open).toFixed(2)),
-      upperWick: parseFloat((prices[prevIdx].high - Math.max(prices[prevIdx].open, prices[prevIdx].close)).toFixed(2)),
-      lowerWick: parseFloat((Math.min(prices[prevIdx].open, prices[prevIdx].close) - prices[prevIdx].low).toFixed(2)),
-      isBullishCandle: prices[prevIdx].close > prices[prevIdx].open ? 1 : 0,
-      isDoji: Math.abs(prices[prevIdx].close - prices[prevIdx].open) < (prices[prevIdx].high - prices[prevIdx].low) * 0.1 ? 1 : 0,
+      bodySize: parseFloat(Math.abs(resampledPrices[prevIdx].close - resampledPrices[prevIdx].open).toFixed(2)),
+      upperWick: parseFloat((resampledPrices[prevIdx].high - Math.max(resampledPrices[prevIdx].open, resampledPrices[prevIdx].close)).toFixed(2)),
+      lowerWick: parseFloat((Math.min(resampledPrices[prevIdx].open, resampledPrices[prevIdx].close) - resampledPrices[prevIdx].low).toFixed(2)),
+      isBullishCandle: resampledPrices[prevIdx].close > resampledPrices[prevIdx].open ? 1 : 0,
+      isDoji: Math.abs(resampledPrices[prevIdx].close - resampledPrices[prevIdx].open) < (resampledPrices[prevIdx].high - resampledPrices[prevIdx].low) * 0.1 ? 1 : 0,
       
       // Price gaps
-      gapUp: prices[prevIdx].open > prices[prevPrevIdx]?.close ? 1 : 0,
-      gapDown: prices[prevIdx].open < prices[prevPrevIdx]?.close ? 1 : 0,
+      gapUp: resampledPrices[prevIdx].open > resampledPrices[prevPrevIdx]?.close ? 1 : 0,
+      gapDown: resampledPrices[prevIdx].open < resampledPrices[prevPrevIdx]?.close ? 1 : 0,
       
       // Returns
-      return1d: prevIdx >= 2 ? parseFloat(((prices[prevIdx].close - prices[prevPrevIdx].close) / prices[prevPrevIdx].close * 100).toFixed(4)) : null,
-      return3d: prevIdx >= 4 ? parseFloat(((prices[prevIdx].close - prices[prevIdx - 3].close) / prices[prevIdx - 3].close * 100).toFixed(4)) : null,
-      return5d: prevIdx >= 6 ? parseFloat(((prices[prevIdx].close - prices[prevIdx - 5].close) / prices[prevIdx - 5].close * 100).toFixed(4)) : null,
+      return1d: prevIdx >= 2 ? parseFloat(((resampledPrices[prevIdx].close - resampledPrices[prevPrevIdx].close) / resampledPrices[prevPrevIdx].close * 100).toFixed(4)) : null,
+      return3d: prevIdx >= 4 ? parseFloat(((resampledPrices[prevIdx].close - resampledPrices[prevIdx - 3].close) / resampledPrices[prevIdx - 3].close * 100).toFixed(4)) : null,
+      return5d: prevIdx >= 6 ? parseFloat(((resampledPrices[prevIdx].close - resampledPrices[prevIdx - 5].close) / resampledPrices[prevIdx - 5].close * 100).toFixed(4)) : null,
       
       // ============ ADVANCED BULLISH DETECTION INDICATORS ============
       
@@ -1216,7 +1266,7 @@ class IndicatorService {
       
       // Volume surge dengan harga naik (bullish volume)
       bullishVolume: (indicators.volumeRatio[prevIdx] && indicators.volumeRatio[prevIdx] > 1.2 && 
-        prices[prevIdx].close > prices[prevIdx].open) ? 1 : 0,
+        resampledPrices[prevIdx].close > resampledPrices[prevIdx].open) ? 1 : 0,
       // Volume spike (>2x average)
       volumeSpike: indicators.volumeRatio[prevIdx] && indicators.volumeRatio[prevIdx] > 2 ? 1 : 0,
       
@@ -1224,8 +1274,8 @@ class IndicatorService {
       nearLowerBB: (indicators.bb[prevIdx] && prevClose <= indicators.bb[prevIdx].lower * 1.02) ? 1 : 0,
       // Price bouncing from lower BB
       bouncingFromLowerBB: (prevPrevIdx >= 0 && indicators.bb[prevIdx] && indicators.bb[prevPrevIdx] &&
-        prices[prevPrevIdx].close <= indicators.bb[prevPrevIdx].lower &&
-        prices[prevIdx].close > indicators.bb[prevIdx].lower) ? 1 : 0,
+        resampledPrices[prevPrevIdx].close <= indicators.bb[prevPrevIdx].lower &&
+        resampledPrices[prevIdx].close > indicators.bb[prevIdx].lower) ? 1 : 0,
       // BB Width sempit (potensi breakout)
       bbSqueeze: (indicators.bb[prevIdx] && 
         ((indicators.bb[prevIdx].upper - indicators.bb[prevIdx].lower) / indicators.bb[prevIdx].middle * 100) < 5) ? 1 : 0,
@@ -1239,17 +1289,17 @@ class IndicatorService {
         indicators.adx[prevIdx].pdi > indicators.adx[prevIdx].mdi) ? 1 : 0,
       
       // Hammer/Bullish Reversal Candle Pattern
-      hammerCandle: (prices[prevIdx].high - prices[prevIdx].low > 0 &&
-        (Math.min(prices[prevIdx].open, prices[prevIdx].close) - prices[prevIdx].low) > 
-        (prices[prevIdx].high - prices[prevIdx].low) * 0.6 &&
-        Math.abs(prices[prevIdx].close - prices[prevIdx].open) < 
-        (prices[prevIdx].high - prices[prevIdx].low) * 0.3) ? 1 : 0,
+      hammerCandle: (resampledPrices[prevIdx].high - resampledPrices[prevIdx].low > 0 &&
+        (Math.min(resampledPrices[prevIdx].open, resampledPrices[prevIdx].close) - resampledPrices[prevIdx].low) > 
+        (resampledPrices[prevIdx].high - resampledPrices[prevIdx].low) * 0.6 &&
+        Math.abs(resampledPrices[prevIdx].close - resampledPrices[prevIdx].open) < 
+        (resampledPrices[prevIdx].high - resampledPrices[prevIdx].low) * 0.3) ? 1 : 0,
       // Bullish engulfing
       bullishEngulfing: (prevPrevIdx >= 0 && 
-        prices[prevPrevIdx].close < prices[prevPrevIdx].open && // Previous bearish
-        prices[prevIdx].close > prices[prevIdx].open && // Current bullish
-        prices[prevIdx].close > prices[prevPrevIdx].open && // Body engulfs
-        prices[prevIdx].open < prices[prevPrevIdx].close) ? 1 : 0,
+        resampledPrices[prevPrevIdx].close < resampledPrices[prevPrevIdx].open && // Previous bearish
+        resampledPrices[prevIdx].close > resampledPrices[prevIdx].open && // Current bullish
+        resampledPrices[prevIdx].close > resampledPrices[prevPrevIdx].open && // Body engulfs
+        resampledPrices[prevIdx].open < resampledPrices[prevPrevIdx].close) ? 1 : 0,
       
       // Multi-indicator bullish confluence score (0-10)
       bullishScore: (() => {
@@ -1265,7 +1315,7 @@ class IndicatorService {
         if (indicators.obv[prevIdx] > indicators.obv[prevPrevIdx]) score += 1; // OBV rising
         // Trend indicators
         if (indicators.adx[prevIdx]?.pdi > indicators.adx[prevIdx]?.mdi) score += 1; // Bullish DI
-        if (prices[prevIdx].close > prices[prevIdx].open) score += 1; // Bullish candle
+        if (resampledPrices[prevIdx].close > resampledPrices[prevIdx].open) score += 1; // Bullish candle
         // Price position
         if (indicators.stoch[prevIdx]?.k < 50) score += 1; // Not overbought stoch
         if (prevClose > indicators.sma20[prevIdx]) score += 1; // Above SMA20
@@ -1274,7 +1324,7 @@ class IndicatorService {
       
       // Composite signals
       oversoldBounce: ((indicators.rsi[prevIdx] < 35 || indicators.stoch[prevIdx]?.k < 25) &&
-        prices[prevIdx].close > prices[prevIdx].open && // Bullish candle
+        resampledPrices[prevIdx].close > resampledPrices[prevIdx].open && // Bullish candle
         indicators.volumeRatio[prevIdx] > 1) ? 1 : 0,
       
       momentumShift: (indicators.macd[prevIdx]?.histogram > indicators.macd[prevPrevIdx]?.histogram &&

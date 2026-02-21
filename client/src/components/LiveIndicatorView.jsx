@@ -96,6 +96,7 @@ export default function LiveIndicatorView() {
   const [symbol, setSymbol] = useState('')
   const [targetDate, setTargetDate] = useState('')
   const [useRealtime, setUseRealtime] = useState(true)
+  const [timeframe, setTimeframe] = useState(1) // 1 = daily, 3 = 3-day, 5 = 5-day, etc.
   const [indicatorData, setIndicatorData] = useState(null)
   const [trainedModels, setTrainedModels] = useState([])
   const [selectedModelIds, setSelectedModelIds] = useState([]) // Changed to array for multiple selection
@@ -189,7 +190,8 @@ export default function LiveIndicatorView() {
       const result = await stockApi.getLiveIndicators(
         symbol.toUpperCase(), 
         targetDate, 
-        useRealtime
+        useRealtime,
+        timeframe
       )
       setIndicatorData(result)
       setLastUpdate(new Date())
@@ -449,6 +451,28 @@ export default function LiveIndicatorView() {
               showPrices={false}
               compact={true}
             />
+          </div>
+
+          {/* Timeframe Selection */}
+          <div>
+            <label className="block text-sm text-gray-400 mb-2">Timeframe</label>
+            <select
+              value={timeframe}
+              onChange={(e) => setTimeframe(Number(e.target.value))}
+              className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+            >
+              <option value={1}>Daily (1 hari)</option>
+              <option value={2}>2 Hari</option>
+              <option value={3}>3 Hari</option>
+              <option value={5}>5 Hari (Weekly)</option>
+              <option value={7}>7 Hari</option>
+              <option value={10}>10 Hari</option>
+              <option value={14}>14 Hari (Bi-weekly)</option>
+              <option value={21}>21 Hari</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              {timeframe > 1 ? `Indikator dihitung dari candle ${timeframe} harian` : 'Indikator dihitung dari data harian'}
+            </p>
           </div>
 
           {/* Date Selection */}
@@ -896,6 +920,11 @@ export default function LiveIndicatorView() {
                 <p className="text-gray-400 text-xs">Harga Close</p>
                 <p className="text-white font-bold">Rp {indicatorData.data.prevClose?.toLocaleString()}</p>
               </div>
+              {indicatorData.info?.timeframe > 1 && (
+                <div className="flex items-center gap-2 bg-purple-500/20 px-2 py-1 rounded">
+                  <span className="text-purple-400 text-xs">⏱️ {indicatorData.info.timeframe}-day timeframe</span>
+                </div>
+              )}
               {indicatorData.info?.isRealtime && (
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>

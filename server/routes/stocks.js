@@ -434,7 +434,7 @@ router.post('/intraday-indicators', async (req, res) => {
 // POST /api/stocks/live-indicators - Get live indicator data with realtime support
 router.post('/live-indicators', async (req, res) => {
   try {
-    const { symbol, targetDate, useRealtime = true } = req.body;
+    const { symbol, targetDate, useRealtime = true, timeframe = 1 } = req.body;
     
     if (!symbol) {
       return res.status(400).json({ error: 'Please provide a stock symbol' });
@@ -442,6 +442,12 @@ router.post('/live-indicators', async (req, res) => {
     
     if (!targetDate) {
       return res.status(400).json({ error: 'Please provide a target date' });
+    }
+
+    // Validate timeframe
+    const tf = parseInt(timeframe, 10);
+    if (isNaN(tf) || tf < 1 || tf > 30) {
+      return res.status(400).json({ error: 'Timeframe must be between 1 and 30 days' });
     }
 
     const today = new Date().toISOString().split('T')[0];
@@ -500,8 +506,8 @@ router.post('/live-indicators', async (req, res) => {
       }
     }
 
-    // Calculate indicators for the target date
-    const indicatorData = indicatorService.getIndicatorsForDate(prices, targetDate);
+    // Calculate indicators for the target date with timeframe
+    const indicatorData = indicatorService.getIndicatorsForDate(prices, targetDate, tf);
     
     if (indicatorData.error) {
       return res.status(400).json({ error: indicatorData.error });
@@ -509,10 +515,11 @@ router.post('/live-indicators', async (req, res) => {
     
     // Add symbol
     indicatorData.symbol = symbol.toUpperCase();
+    indicatorData.timeframe = tf;
 
     // Count features
     const featureCount = Object.keys(indicatorData).filter(
-      key => !['symbol', 'targetDate', 'indicatorDate', 'actualData'].includes(key)
+      key => !['symbol', 'targetDate', 'indicatorDate', 'actualData', 'timeframe'].includes(key)
     ).length;
 
     res.json({
@@ -522,11 +529,12 @@ router.post('/live-indicators', async (req, res) => {
         symbol: symbol.toUpperCase(),
         targetDate: indicatorData.targetDate,
         indicatorDate: indicatorData.indicatorDate,
+        timeframe: tf,
         isRealtime: isRealtime,
         featureCount: featureCount,
         message: isRealtime 
-          ? `Using realtime data as of ${new Date().toLocaleTimeString()}`
-          : `Indicators from ${indicatorData.indicatorDate} for predicting ${indicatorData.targetDate}`
+          ? `Using realtime data as of ${new Date().toLocaleTimeString()}${tf > 1 ? ` (${tf}-day timeframe)` : ''}`
+          : `Indicators from ${indicatorData.indicatorDate} for predicting ${indicatorData.targetDate}${tf > 1 ? ` (${tf}-day timeframe)` : ''}`
       }
     });
   } catch (error) {

@@ -154,12 +154,6 @@ const ALL_FEATURES = {
   adxRising: { label: 'ADX Rising', group: 'bullish', desc: '1 jika ADX naik (trend menguat)' },
   bullishDICross: { label: 'Bullish DI Cross', group: 'bullish', desc: '1 jika +DI cross di atas -DI' },
   
-  // MACD Advanced
-  macdNearGoldenCross: { label: 'MACD Near Golden Cross', group: 'bullish', desc: '1 jika MACD mendekati signal (siap cross)' },
-  macdHistogramConverging: { label: 'MACD Hist Converging', group: 'bullish', desc: '1 jika histogram mendekati 0' },
-  macdHistogramRising: { label: 'MACD Hist Rising', group: 'bullish', desc: '1 jika histogram naik 2 hari berturut' },
-  macdDistanceToSignal: { label: 'MACD Distance to Signal', group: 'bullish', desc: 'Jarak MACD ke Signal line (%)' },
-  
   // Candlestick Patterns
   hammerCandle: { label: 'Hammer Candle', group: 'bullish', desc: '1 jika pola hammer (reversal bullish)' },
   bullishEngulfing: { label: 'Bullish Engulfing', group: 'bullish', desc: '1 jika pola bullish engulfing' },

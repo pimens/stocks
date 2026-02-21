@@ -72,11 +72,13 @@ export const stockApi = {
   },
 
   // Get live indicator data (supports realtime calculation for today)
-  getLiveIndicators: async (symbol, targetDate, useRealtime = true) => {
+  // timeframe: 1 = daily, 3 = 3-day candles, 5 = weekly equivalent, etc.
+  getLiveIndicators: async (symbol, targetDate, useRealtime = true, timeframe = 1) => {
     const response = await axios.post(`${API_BASE}/stocks/live-indicators`, {
       symbol,
       targetDate,
-      useRealtime
+      useRealtime,
+      timeframe
     })
     return response.data
   },
