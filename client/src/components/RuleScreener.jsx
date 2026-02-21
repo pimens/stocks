@@ -163,6 +163,33 @@ const ALL_FEATURES = {
   oversoldBounce: { label: 'Oversold Bounce', group: 'bullish', desc: '1 jika oversold + candle hijau + volume' },
   momentumShift: { label: 'Momentum Shift', group: 'bullish', desc: '1 jika MACD, RSI, DI semua bullish' },
 
+  // Golden Cross MA (Moving Average Crossovers)
+  ma5CrossAboveMa10: { label: 'MA5 Golden Cross MA10', group: 'ma_cross', desc: '1 jika MA5 memotong MA10 ke atas' },
+  ma10CrossAboveMa20: { label: 'MA10 Golden Cross MA20', group: 'ma_cross', desc: '1 jika MA10 memotong MA20 ke atas' },
+  ma20CrossAboveMa50: { label: 'MA20 Golden Cross MA50', group: 'ma_cross', desc: '1 jika MA20 memotong MA50 ke atas' },
+  ma50CrossAboveMa100: { label: 'MA50 Golden Cross MA100', group: 'ma_cross', desc: '1 jika MA50 memotong MA100 ke atas' },
+  ma100CrossAboveMa200: { label: 'MA100 Golden Cross MA200', group: 'ma_cross', desc: '1 jika MA100 memotong MA200 ke atas' },
+  
+  // Death Cross MA (Bearish Crossovers)
+  ma5CrossBelowMa10: { label: 'MA5 Death Cross MA10', group: 'ma_cross', desc: '1 jika MA5 memotong MA10 ke bawah' },
+  ma10CrossBelowMa20: { label: 'MA10 Death Cross MA20', group: 'ma_cross', desc: '1 jika MA10 memotong MA20 ke bawah' },
+  ma20CrossBelowMa50: { label: 'MA20 Death Cross MA50', group: 'ma_cross', desc: '1 jika MA20 memotong MA50 ke bawah' },
+  ma50CrossBelowMa100: { label: 'MA50 Death Cross MA100', group: 'ma_cross', desc: '1 jika MA50 memotong MA100 ke bawah' },
+  ma100CrossBelowMa200: { label: 'MA100 Death Cross MA200', group: 'ma_cross', desc: '1 jika MA100 memotong MA200 ke bawah' },
+
+  // Distance & Support Level Detection
+  distFromHigh52w: { label: 'Distance from 52w High (%)', group: 'support', desc: 'Jarak dari 52-week high dalam %' },
+  farFromHigh52w: { label: 'Far from 52w High (>30%)', group: 'support', desc: '1 jika jauh dari 52w high' },
+  veryFarFromHigh52w: { label: 'Very Far from 52w High (>50%)', group: 'support', desc: '1 jika sangat jauh dari 52w high' },
+  distFromLow52w: { label: 'Distance from 52w Low (%)', group: 'support', desc: 'Jarak dari 52-week low dalam %' },
+  nearLow52w: { label: 'Near 52w Low (<10%)', group: 'support', desc: '1 jika dekat dengan 52w low' },
+  
+  supportLevel50d: { label: 'Support Level (50d)', group: 'support', desc: 'Level support 50 hari terakhir' },
+  resistanceLevel50d: { label: 'Resistance Level (50d)', group: 'support', desc: 'Level resistance 50 hari terakhir' },
+  distFromSupport: { label: 'Distance from Support (%)', group: 'support', desc: 'Jarak dari support level dalam %' },
+  nearSupport: { label: 'Near Support (<5%)', group: 'support', desc: '1 jika sangat dekat dengan support' },
+  recoveryPotential: { label: 'Recovery Potential', group: 'support', desc: '1 jika dekat support tapi jauh dari high' },
+
   // Price Data (for raw comparison)
   close: { label: 'Close', group: 'price', desc: 'Harga Close' },
   open: { label: 'Open', group: 'price', desc: 'Harga Open' },
@@ -177,6 +204,7 @@ const FEATURE_GROUPS = {
   delta: { label: '📐 Delta/Change', color: 'cyan' },
   sma: { label: '📈 SMA', color: 'green' },
   ema: { label: '📉 EMA', color: 'teal' },
+  ma_cross: { label: '✂️ MA Golden/Death Cross', color: 'amber' },
   rsi: { label: '🔄 RSI', color: 'yellow' },
   macd: { label: '📶 MACD', color: 'purple' },
   bollinger: { label: '🎯 Bollinger Bands', color: 'pink' },
@@ -191,6 +219,7 @@ const FEATURE_GROUPS = {
   candlestick: { label: '🕯️ Candlestick', color: 'rose' },
   returns: { label: '📆 Returns', color: 'sky' },
   bullish: { label: '🔥 Bullish Signals', color: 'green' },
+  support: { label: '🎯 Support & Distance', color: 'cyan' },
   price: { label: '💵 Price Data', color: 'gray' },
 }
 
@@ -353,7 +382,126 @@ const PRESET_RULES = {
       { leftFeature: 'closePosition', operator: '>', compareType: 'constant', rightValue: 0.7 },
       { leftFeature: 'priceAboveSMA20', operator: '==', compareType: 'constant', rightValue: 1 },
     ]
-  }
+  },
+  // ============ DISTANCE & SUPPORT LEVEL PRESETS ============
+  far_from_high_near_support: {
+    name: '🎯 Far from High + Near Support',
+    desc: '⭐ RECOMMENDED: Jauh dari ATH tapi dekat support = recovery potential',
+    rules: [
+      { leftFeature: 'veryFarFromHigh52w', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'nearSupport', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'recoveryPotential', operator: '==', compareType: 'constant', rightValue: 1 },
+    ]
+  },
+  very_far_from_high: {
+    name: '📉 Very Far from 52w High (>50%)',
+    desc: '⭐ RECOMMENDED: Saham sudah turun >50% dari puncak (sangat jauh)',
+    rules: [
+      { leftFeature: 'veryFarFromHigh52w', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'rsi', operator: '<', compareType: 'constant', rightValue: 50 },
+    ]
+  },
+  far_from_high_moderate: {
+    name: '📊 Far from 52w High (30-50%)',
+    desc: 'Saham sudah jauh dari puncak (moderate drop)',
+    rules: [
+      { leftFeature: 'farFromHigh52w', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'veryFarFromHigh52w', operator: '==', compareType: 'constant', rightValue: 0 }, // NOT very far
+      { leftFeature: 'distFromHigh52w', operator: '>', compareType: 'constant', rightValue: 30 },
+      { leftFeature: 'distFromHigh52w', operator: '<=', compareType: 'constant', rightValue: 50 },
+    ]
+  },
+  near_52w_low: {
+    name: '⬇️ Near 52w Low (<10%)',
+    desc: 'Saham dekat dengan terendah 52 minggu (potential bottom)',
+    rules: [
+      { leftFeature: 'nearLow52w', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'rsi', operator: '<', compareType: 'constant', rightValue: 40 },
+    ]
+  },
+  at_support_level: {
+    name: '🛡️ At Support Level (<5%)',
+    desc: '⭐ RECOMMENDED: Harga sangat dekat dengan support level',
+    rules: [
+      { leftFeature: 'nearSupport', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'distFromSupport', operator: '<', compareType: 'constant', rightValue: 5 },
+    ]
+  },
+  support_with_bullish: {
+    name: '🎯 Support + Bullish Confirmation',
+    desc: '⭐ RECOMMENDED: Di support dengan signal bullish',
+    rules: [
+      { leftFeature: 'nearSupport', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'rsi', operator: '<', compareType: 'constant', rightValue: 40 },
+      { leftFeature: 'isBullishCandle', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'volumeRatio', operator: '>', compareType: 'constant', rightValue: 1 },
+    ]
+  },
+  support_bounce_setup: {
+    name: '📈 Support Bounce Setup',
+    desc: 'Setup untuk bounce dari support (PRZ zone)',
+    rules: [
+      { leftFeature: 'nearSupport', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'distFromSupport', operator: '<', compareType: 'constant', rightValue: 10 },
+      { leftFeature: 'rsi', operator: '<', compareType: 'constant', rightValue: 45 },
+      { leftFeature: 'macdPositive', operator: '==', compareType: 'constant', rightValue: 1 },
+    ]
+  },
+  // ============ GOLDEN CROSS MA PRESETS ============
+  ma20_golden_cross_ma50: {
+    name: '✂️ MA20 Golden Cross MA50',
+    desc: '⭐ RECOMMENDED: MA20 memotong MA50 ke atas (strong bullish signal)',
+    rules: [
+      { leftFeature: 'ma20CrossAboveMa50', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'volumeRatio', operator: '>', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'rsi', operator: '>', compareType: 'constant', rightValue: 40 },
+    ]
+  },
+  ma10_golden_cross_ma20: {
+    name: '✂️ MA10 Golden Cross MA20',
+    desc: 'MA10 memotong MA20 ke atas (medium bullish signal)',
+    rules: [
+      { leftFeature: 'ma10CrossAboveMa20', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'ma20AboveSMA50', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'volumeRatio', operator: '>', compareType: 'constant', rightValue: 1 },
+    ]
+  },
+  ma5_golden_cross_ma10: {
+    name: '✂️ MA5 Golden Cross MA10',
+    desc: 'MA5 memotong MA10 ke atas (fast bullish signal)',
+    rules: [
+      { leftFeature: 'ma5CrossAboveMa10', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'sma10AboveSMA20', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'isBullishCandle', operator: '==', compareType: 'constant', rightValue: 1 },
+    ]
+  },
+  ma50_golden_cross_ma100: {
+    name: '✂️ MA50 Golden Cross MA100',
+    desc: '⭐ RECOMMENDED: MA50 memotong MA100 ke atas (long-term bullish)',
+    rules: [
+      { leftFeature: 'ma50CrossAboveMa100', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'adx', operator: '>', compareType: 'constant', rightValue: 20 },
+      { leftFeature: 'volumeRatio', operator: '>', compareType: 'constant', rightValue: 1 },
+    ]
+  },
+  ma_uptrend_alignment: {
+    name: '📈 MA Uptrend Alignment',
+    desc: '⭐ RECOMMENDED: MA5 > MA10 > MA20 > MA50 (perfect uptrend)',
+    rules: [
+      { leftFeature: 'sma5AboveSMA10', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'sma10AboveSMA20', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'sma20AboveSMA50', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'macdBullish', operator: '==', compareType: 'constant', rightValue: 1 },
+    ]
+  },
+  ma_death_cross_warning: {
+    name: '⚠️ MA Death Cross Warning',
+    desc: 'Signal bearish: MA cepat memotong MA lambat ke bawah',
+    rules: [
+      { leftFeature: 'ma20CrossBelowMa50', operator: '==', compareType: 'constant', rightValue: 1 },
+      { leftFeature: 'rsi', operator: '<', compareType: 'constant', rightValue: 50 },
+    ]
+  },
 }
 
 // Complete IDX stocks with sector info
