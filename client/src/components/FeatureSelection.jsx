@@ -29,6 +29,8 @@ const ALL_FEATURES = {
   sma10: { label: 'SMA 10', group: 'sma', desc: 'Simple Moving Average 10 hari' },
   sma20: { label: 'SMA 20', group: 'sma', desc: 'Simple Moving Average 20 hari' },
   sma50: { label: 'SMA 50', group: 'sma', desc: 'Simple Moving Average 50 hari' },
+  sma100: { label: 'SMA 100', group: 'sma', desc: 'Simple Moving Average 100 hari' },
+  sma200: { label: 'SMA 200', group: 'sma', desc: 'Simple Moving Average 200 hari' },
   priceAboveSMA5: { label: 'Price > SMA5', group: 'sma', desc: '1 jika close > SMA5' },
   priceAboveSMA10: { label: 'Price > SMA10', group: 'sma', desc: '1 jika close > SMA10' },
   priceAboveSMA20: { label: 'Price > SMA20', group: 'sma', desc: '1 jika close > SMA20' },
@@ -45,11 +47,28 @@ const ALL_FEATURES = {
   priceAboveEMA12: { label: 'Price > EMA12', group: 'ema', desc: '1 jika close > EMA12' },
   priceAboveEMA26: { label: 'Price > EMA26', group: 'ema', desc: '1 jika close > EMA26' },
 
+  // Golden Cross MA (Moving Average Crossovers)
+  ma5CrossAboveMa10: { label: 'MA5 Golden Cross MA10', group: 'ma_cross', desc: '1 jika MA5 memotong MA10 ke atas' },
+  ma10CrossAboveMa20: { label: 'MA10 Golden Cross MA20', group: 'ma_cross', desc: '1 jika MA10 memotong MA20 ke atas' },
+  ma20CrossAboveMa50: { label: 'MA20 Golden Cross MA50', group: 'ma_cross', desc: '1 jika MA20 memotong MA50 ke atas' },
+  ma50CrossAboveMa100: { label: 'MA50 Golden Cross MA100', group: 'ma_cross', desc: '1 jika MA50 memotong MA100 ke atas' },
+  ma100CrossAboveMa200: { label: 'MA100 Golden Cross MA200', group: 'ma_cross', desc: '1 jika MA100 memotong MA200 ke atas' },
+  
+  // Death Cross MA (Bearish Crossovers)
+  ma5CrossBelowMa10: { label: 'MA5 Death Cross MA10', group: 'ma_cross', desc: '1 jika MA5 memotong MA10 ke bawah' },
+  ma10CrossBelowMa20: { label: 'MA10 Death Cross MA20', group: 'ma_cross', desc: '1 jika MA10 memotong MA20 ke bawah' },
+  ma20CrossBelowMa50: { label: 'MA20 Death Cross MA50', group: 'ma_cross', desc: '1 jika MA20 memotong MA50 ke bawah' },
+  ma50CrossBelowMa100: { label: 'MA50 Death Cross MA100', group: 'ma_cross', desc: '1 jika MA50 memotong MA100 ke bawah' },
+  ma100CrossBelowMa200: { label: 'MA100 Death Cross MA200', group: 'ma_cross', desc: '1 jika MA100 memotong MA200 ke bawah' },
+
   // RSI
   rsi: { label: 'RSI', group: 'rsi', desc: 'Relative Strength Index (14)' },
   rsiOversold: { label: 'RSI Oversold', group: 'rsi', desc: '1 jika RSI < 30' },
   rsiOverbought: { label: 'RSI Overbought', group: 'rsi', desc: '1 jika RSI > 70' },
   rsiNeutral: { label: 'RSI Neutral', group: 'rsi', desc: '1 jika 30 <= RSI <= 70' },
+  rsiRising: { label: 'RSI Rising', group: 'rsi', desc: '1 jika RSI naik dari hari sebelumnya' },
+  rsiExitOversold: { label: 'RSI Exit Oversold', group: 'rsi', desc: '1 jika RSI cross di atas 30' },
+  rsiBullishZone: { label: 'RSI Bullish Zone', group: 'rsi', desc: '1 jika RSI 30-50 (zona potensi naik)' },
 
   // MACD
   macd: { label: 'MACD', group: 'macd', desc: 'MACD line' },
@@ -57,6 +76,12 @@ const ALL_FEATURES = {
   macdHistogram: { label: 'MACD Histogram', group: 'macd', desc: 'Histogram (MACD - Signal)' },
   macdBullish: { label: 'MACD Bullish', group: 'macd', desc: '1 jika MACD > Signal' },
   macdPositive: { label: 'MACD Positive', group: 'macd', desc: '1 jika MACD > 0' },
+  macdGoldenCross: { label: 'MACD Golden Cross', group: 'macd', desc: '1 jika MACD cross di atas Signal' },
+  macdDeathCross: { label: 'MACD Death Cross', group: 'macd', desc: '1 jika MACD cross di bawah Signal' },
+  macdNearGoldenCross: { label: 'MACD Near Golden Cross', group: 'macd', desc: '1 jika histogram < 0 tapi naik' },
+  macdHistogramConverging: { label: 'MACD Histogram Converging', group: 'macd', desc: '1 jika histogram mendekati 0' },
+  macdHistogramRising: { label: 'MACD Histogram Rising', group: 'macd', desc: '1 jika histogram naik 2 hari' },
+  macdDistanceToSignal: { label: 'MACD Dist to Signal %', group: 'macd', desc: 'Jarak MACD ke Signal dalam %' },
 
   // Bollinger Bands
   bbUpper: { label: 'BB Upper', group: 'bollinger', desc: 'Bollinger Band atas' },
@@ -65,6 +90,9 @@ const ALL_FEATURES = {
   bbWidth: { label: 'BB Width %', group: 'bollinger', desc: 'Lebar BB dalam persen' },
   priceBelowLowerBB: { label: 'Price < Lower BB', group: 'bollinger', desc: '1 jika close < BB bawah' },
   priceAboveUpperBB: { label: 'Price > Upper BB', group: 'bollinger', desc: '1 jika close > BB atas' },
+  nearLowerBB: { label: 'Near Lower BB', group: 'bollinger', desc: '1 jika harga dekat lower BB' },
+  bouncingFromLowerBB: { label: 'Bouncing Lower BB', group: 'bollinger', desc: '1 jika memantul dari lower BB' },
+  bbSqueeze: { label: 'BB Squeeze', group: 'bollinger', desc: '1 jika BB sempit (potensi breakout)' },
 
   // Stochastic
   stochK: { label: 'Stochastic %K', group: 'stochastic', desc: 'Stochastic %K' },
@@ -72,6 +100,8 @@ const ALL_FEATURES = {
   stochOversold: { label: 'Stoch Oversold', group: 'stochastic', desc: '1 jika %K < 20' },
   stochOverbought: { label: 'Stoch Overbought', group: 'stochastic', desc: '1 jika %K > 80' },
   stochBullishCross: { label: 'Stoch Bullish Cross', group: 'stochastic', desc: '1 jika %K > %D' },
+  stochGoldenCross: { label: 'Stoch Golden Cross', group: 'stochastic', desc: '1 jika %K cross di atas %D' },
+  stochExitOversold: { label: 'Stoch Exit Oversold', group: 'stochastic', desc: '1 jika %K cross di atas 20' },
 
   // ADX/DMI
   adx: { label: 'ADX', group: 'adx', desc: 'Average Directional Index' },
@@ -79,6 +109,8 @@ const ALL_FEATURES = {
   mdi: { label: '-DI', group: 'adx', desc: 'Minus Directional Indicator' },
   strongTrend: { label: 'Strong Trend', group: 'adx', desc: '1 jika ADX > 25' },
   bullishDI: { label: 'Bullish DI', group: 'adx', desc: '1 jika +DI > -DI' },
+  adxRising: { label: 'ADX Rising', group: 'adx', desc: '1 jika ADX naik (trend menguat)' },
+  bullishDICross: { label: 'Bullish DI Cross', group: 'adx', desc: '1 jika +DI cross di atas -DI' },
 
   // Volatility
   atr: { label: 'ATR', group: 'volatility', desc: 'Average True Range (14)' },
@@ -90,6 +122,8 @@ const ALL_FEATURES = {
   obvTrend: { label: 'OBV Trend', group: 'volume', desc: 'Tren OBV: 1=naik, -1=turun, 0=tetap' },
   volumeRatio: { label: 'Volume Ratio', group: 'volume', desc: 'Volume / Avg Volume (20)' },
   highVolume: { label: 'High Volume', group: 'volume', desc: '1 jika volume > 1.5x rata-rata' },
+  bullishVolume: { label: 'Bullish Volume', group: 'volume', desc: '1 jika volume tinggi + candle hijau' },
+  volumeSpike: { label: 'Volume Spike', group: 'volume', desc: '1 jika volume > 2x average' },
 
   // Williams %R
   williamsR: { label: 'Williams %R', group: 'williams', desc: 'Williams %R (14)' },
@@ -111,7 +145,7 @@ const ALL_FEATURES = {
   rocPositive: { label: 'ROC Positive', group: 'momentum', desc: '1 jika ROC > 0' },
   momentum: { label: 'Momentum', group: 'momentum', desc: 'Price Momentum (10)' },
   momentumPositive: { label: 'Momentum Positive', group: 'momentum', desc: '1 jika Momentum > 0' },
-  pricePosition: { label: 'Price Position', group: 'momentum', desc: 'Posisi harga dalam range 20 hari (0-100)' },
+  pricePosition: { label: 'Price Position', group: 'momentum', desc: 'Posisi harga dalam range 20 hari' },
 
   // Candlestick
   bodySize: { label: 'Body Size', group: 'candlestick', desc: 'Ukuran body candle' },
@@ -121,11 +155,30 @@ const ALL_FEATURES = {
   isDoji: { label: 'Doji', group: 'candlestick', desc: '1 jika body < 10% range' },
   gapUp: { label: 'Gap Up', group: 'candlestick', desc: '1 jika open > prev close' },
   gapDown: { label: 'Gap Down', group: 'candlestick', desc: '1 jika open < prev close' },
+  hammerCandle: { label: 'Hammer Candle', group: 'candlestick', desc: '1 jika pola hammer (reversal)' },
+  bullishEngulfing: { label: 'Bullish Engulfing', group: 'candlestick', desc: '1 jika pola bullish engulfing' },
 
   // Returns
   return1d: { label: 'Return 1D', group: 'returns', desc: 'Return 1 hari sebelumnya (%)' },
   return3d: { label: 'Return 3D', group: 'returns', desc: 'Return 3 hari sebelumnya (%)' },
   return5d: { label: 'Return 5D', group: 'returns', desc: 'Return 5 hari sebelumnya (%)' },
+
+  // Distance & Support Level Detection
+  distFromHigh52w: { label: 'Distance from 52w High (%)', group: 'support', desc: 'Jarak dari 52-week high dalam %' },
+  farFromHigh52w: { label: 'Far from 52w High (>30%)', group: 'support', desc: '1 jika jauh dari 52w high' },
+  veryFarFromHigh52w: { label: 'Very Far from 52w High (>50%)', group: 'support', desc: '1 jika sangat jauh dari 52w high' },
+  distFromLow52w: { label: 'Distance from 52w Low (%)', group: 'support', desc: 'Jarak dari 52-week low dalam %' },
+  nearLow52w: { label: 'Near 52w Low (<10%)', group: 'support', desc: '1 jika dekat dengan 52w low' },
+  supportLevel50d: { label: 'Support Level (50d)', group: 'support', desc: 'Level support 50 hari terakhir' },
+  resistanceLevel50d: { label: 'Resistance Level (50d)', group: 'support', desc: 'Level resistance 50 hari terakhir' },
+  distFromSupport: { label: 'Distance from Support (%)', group: 'support', desc: 'Jarak dari support level dalam %' },
+  nearSupport: { label: 'Near Support (<5%)', group: 'support', desc: '1 jika sangat dekat dengan support' },
+  recoveryPotential: { label: 'Recovery Potential', group: 'support', desc: '1 jika dekat support tapi jauh dari high' },
+  
+  // Composite Scores & Bullish Signals
+  bullishScore: { label: 'Bullish Score (0-10)', group: 'bullish', desc: 'Skor komposit bullish dari multi-indikator' },
+  oversoldBounce: { label: 'Oversold Bounce', group: 'bullish', desc: '1 jika oversold + candle hijau + volume' },
+  momentumShift: { label: 'Momentum Shift', group: 'bullish', desc: '1 jika MACD, RSI, DI semua bullish' },
 
   // Price Data
   prevClose: { label: 'Prev Close', group: 'price', desc: 'Harga close H-1' },
@@ -141,6 +194,7 @@ const FEATURE_GROUPS = {
   delta: { label: '📐 Delta/Change', color: 'cyan' },
   sma: { label: '📈 SMA', color: 'green' },
   ema: { label: '📉 EMA', color: 'teal' },
+  ma_cross: { label: '✂️ MA Golden/Death Cross', color: 'amber' },
   rsi: { label: '🔄 RSI', color: 'yellow' },
   macd: { label: '📶 MACD', color: 'purple' },
   bollinger: { label: '🎯 Bollinger Bands', color: 'pink' },
@@ -154,6 +208,8 @@ const FEATURE_GROUPS = {
   momentum: { label: '🚀 Momentum', color: 'violet' },
   candlestick: { label: '🕯️ Candlestick', color: 'rose' },
   returns: { label: '📆 Returns', color: 'sky' },
+  bullish: { label: '🔥 Bullish Signals', color: 'green' },
+  support: { label: '🎯 Support & Distance', color: 'cyan' },
   price: { label: '💵 Price Data', color: 'gray' },
 }
 

@@ -725,6 +725,9 @@ export default function MLPrediction({ regressionData, selectedColumns }) {
               {trainingResult.metrics.confusion_matrix && (
                 <div className="bg-gray-800/50 rounded-lg p-4">
                   <h4 className="text-white font-semibold mb-3">🔢 Confusion Matrix</h4>
+                  <p className="text-xs text-gray-400 mb-3">
+                    Baris = actual, kolom = predicted. Nilai diagonal = prediksi benar, di luar diagonal = salah.
+                  </p>
                   <div className="overflow-x-auto">
                     <table className="text-center">
                       <tbody>
@@ -744,6 +747,12 @@ export default function MLPrediction({ regressionData, selectedColumns }) {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                  <div className="mt-3 text-xs text-gray-400 space-y-1">
+                    <p><span className="text-gray-300">Accuracy</span> = total diagonal / total data.</p>
+                    <p><span className="text-gray-300">Precision</span> = TP / (TP + FP).</p>
+                    <p><span className="text-gray-300">Recall</span> = TP / (TP + FN).</p>
+                    <p><span className="text-gray-300">F1</span> = 2 × (Precision × Recall) / (Precision + Recall).</p>
                   </div>
                 </div>
               )}
