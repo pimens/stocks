@@ -1581,6 +1581,21 @@ class IndicatorService {
         const percentDist = (distance / prevClose) * 100;
         return percentDist < 3 ? 1 : 0; // Warning signal, akan reversal
       })(),
+      psarBullishReversal: (() => {
+        if (prevIdx < 1 || !indicators.psar[prevIdx] || !indicators.psar[prevPrevIdx]) return 0;
+        // Reversal dari bearish ke bullish: SAR cross dari atas ke bawah harga
+        const prevWasBearish = resampledPrices[prevPrevIdx].close < indicators.psar[prevPrevIdx];
+        const nowBullish = prevClose > indicators.psar[prevIdx];
+        return (prevWasBearish && nowBullish) ? 1 : 0;
+      })(),
+      psarAboutToBullishReversal: (() => {
+        if (!indicators.psar[prevIdx] || prevIdx < 5) return 0;
+        // SAR di atas harga dan sangat dekat (<3%), akan pindah ke bawah
+        if (indicators.psar[prevIdx] <= prevClose) return 0; // SAR sudah di bawah, skip
+        const distance = indicators.psar[prevIdx] - prevClose;
+        const percentDist = (distance / prevClose) * 100;
+        return percentDist < 3 ? 1 : 0; // Warning: SAR di atas tapi dekat, akan bullish reversal
+      })(),
       
       // Composite signals
       oversoldBounce: ((indicators.rsi[prevIdx] < 35 || indicators.stoch[prevIdx]?.k < 25) &&
@@ -1818,6 +1833,39 @@ class IndicatorService {
       // Parabolic SAR
       psar: safeToFixed(psar[i]),
       psarBullish: psar[i] && currentClose > psar[i] ? 1 : 0,
+      psarAbovePrice: psar[i] && currentClose < psar[i] ? 1 : 0,
+      psarBelowPrice: psar[i] && currentClose > psar[i] ? 1 : 0,
+      psarNearPrice: (() => {
+        if (!psar[i]) return 0;
+        const distance = Math.abs(currentClose - psar[i]);
+        const percentDist = (distance / currentClose) * 100;
+        return percentDist < 2 ? 1 : 0;
+      })(),
+      psarBearishReversal: (() => {
+        if (prevIdx < 0 || !psar[i] || !psar[prevIdx]) return 0;
+        const prevWasBullish = prevClosePrice > psar[prevIdx];
+        const nowBearish = currentClose < psar[i];
+        return (prevWasBullish && nowBearish) ? 1 : 0;
+      })(),
+      psarBullishReversal: (() => {
+        if (prevIdx < 0 || !psar[i] || !psar[prevIdx]) return 0;
+        const prevWasBearish = prevClosePrice < psar[prevIdx];
+        const nowBullish = currentClose > psar[i];
+        return (prevWasBearish && nowBullish) ? 1 : 0;
+      })(),
+      psarAboutToReversal: (() => {
+        if (!psar[i]) return 0;
+        const distance = Math.abs(currentClose - psar[i]);
+        const percentDist = (distance / currentClose) * 100;
+        return percentDist < 3 ? 1 : 0;
+      })(),
+      psarAboutToBullishReversal: (() => {
+        if (!psar[i]) return 0;
+        if (psar[i] <= currentClose) return 0;
+        const distance = psar[i] - currentClose;
+        const percentDist = (distance / currentClose) * 100;
+        return percentDist < 3 ? 1 : 0;
+      })(),
       
       // SuperTrend
       supertrend: safeToFixed(supertrend[i]),

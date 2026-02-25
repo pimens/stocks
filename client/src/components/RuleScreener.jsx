@@ -196,7 +196,9 @@ const ALL_FEATURES = {
   psarBelowPrice: { label: 'SAR < Price', group: 'reversal', desc: '1 jika SAR di bawah harga (uptrend)' },
   psarNearPrice: { label: 'SAR Dekat Harga', group: 'reversal', desc: '1 jika SAR dalam 2% dari harga' },
   psarBearishReversal: { label: 'SAR Bearish Reversal', group: 'reversal', desc: '1 jika SAR baru saja cross (bullish→bearish)' },
+  psarBullishReversal: { label: 'SAR Bullish Reversal', group: 'reversal', desc: '1 jika SAR baru saja cross dari atas ke bawah harga (bearish→bullish)' },
   psarAboutToReversal: { label: 'SAR Akan Reversal', group: 'reversal', desc: '1 jika SAR sangat dekat (<3%), akan terjadi crossing' },
+  psarAboutToBullishReversal: { label: 'SAR Akan Bullish Reversal', group: 'reversal', desc: '1 jika SAR di atas harga & dekat (<3%), akan pindah ke bawah' },
 
   // Price Data (for raw comparison)
   close: { label: 'Close', group: 'price', desc: 'Harga Close' },

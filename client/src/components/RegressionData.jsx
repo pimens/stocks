@@ -198,7 +198,9 @@ const ALL_COLUMNS = {
   psarBelowPrice: { label: 'SAR < Price', group: 'reversal', desc: '1 jika SAR di bawah harga (uptrend)' },
   psarNearPrice: { label: 'SAR Dekat Harga', group: 'reversal', desc: '1 jika SAR dalam 2% dari harga' },
   psarBearishReversal: { label: 'SAR Bearish Reversal', group: 'reversal', desc: '1 jika SAR baru saja cross (bullish→bearish)' },
+  psarBullishReversal: { label: 'SAR Bullish Reversal', group: 'reversal', desc: '1 jika SAR baru saja cross dari atas ke bawah harga (bearish→bullish)' },
   psarAboutToReversal: { label: 'SAR Akan Reversal', group: 'reversal', desc: '1 jika SAR sangat dekat (<3%), akan terjadi crossing' },
+  psarAboutToBullishReversal: { label: 'SAR Akan Bullish Reversal', group: 'reversal', desc: '1 jika SAR di atas harga & dekat (<3%), akan pindah ke bawah' },
 
   // Composite Scores & Bullish Signals
   bullishScore: { label: 'Bullish Score (0-10)', group: 'bullish', desc: 'Skor komposit bullish dari multi-indikator' },
