@@ -491,6 +491,64 @@ class IndicatorService {
     return padded;
   }
 
+  // Calculate Parabolic SAR - Detects trend reversals
+  calculateParabolicSAR(prices, initialAF = 0.02, maxAF = 0.2) {
+    const results = [];
+    if (prices.length < 2) return Array(prices.length).fill(null);
+    
+    let isUptrend = prices[1].close > prices[0].close;
+    let af = initialAF;
+    let extremePoint = isUptrend ? Math.max(prices[0].high, prices[1].high) : Math.min(prices[0].low, prices[1].low);
+    let sar = isUptrend ? Math.min(prices[0].low, prices[1].low) : Math.max(prices[0].high, prices[1].high);
+    
+    results.push(sar);
+    
+    for (let i = 1; i < prices.length; i++) {
+      const priorSAR = sar;
+      sar = sar + af * (extremePoint - sar);
+      
+      // SAR cannot go beyond the last 2 bars
+      if (isUptrend) {
+        sar = Math.min(sar, prices[i - 1].low);
+        if (i > 1) sar = Math.min(sar, prices[i - 2].low);
+      } else {
+        sar = Math.max(sar, prices[i - 1].high);
+        if (i > 1) sar = Math.max(sar, prices[i - 2].high);
+      }
+      
+      // Check for reversal
+      let reversalOccurred = false;
+      if (isUptrend && prices[i].low < sar) {
+        isUptrend = false;
+        sar = extremePoint;
+        extremePoint = prices[i].low;
+        af = initialAF;
+        reversalOccurred = true;
+      } else if (!isUptrend && prices[i].high > sar) {
+        isUptrend = true;
+        sar = extremePoint;
+        extremePoint = prices[i].high;
+        af = initialAF;
+        reversalOccurred = true;
+      }
+      
+      // Update extreme point and AF if no reversal
+      if (!reversalOccurred) {
+        if (isUptrend && prices[i].high > extremePoint) {
+          extremePoint = prices[i].high;
+          af = Math.min(af + initialAF, maxAF);
+        } else if (!isUptrend && prices[i].low < extremePoint) {
+          extremePoint = prices[i].low;
+          af = Math.min(af + initialAF, maxAF);
+        }
+      }
+      
+      results.push(sar);
+    }
+    
+    return results;
+  }
+
   // Calculate Price Position in Range (0-100)
   calculatePricePosition(prices, period = 20) {
     const results = [];
@@ -547,12 +605,13 @@ class IndicatorService {
     const momentum = this.calculateMomentum(prices);
     const pricePosition = this.calculatePricePosition(prices);
     const volumeRatio = this.calculateVolumeRatio(prices);
+    const psar = this.calculateParabolicSAR(prices);
 
     return {
       sma5, sma10, sma20, sma50, sma100, sma200,
       ema5, ema10, ema12, ema26, ema21, ema21High, ema21Low,
       rsi, macd, bb, stoch, adx, atr, obv,
-      williamsR, cci, mfi, roc, momentum, pricePosition, volumeRatio
+      williamsR, cci, mfi, roc, momentum, pricePosition, volumeRatio, psar
     };
   }
 
@@ -564,6 +623,12 @@ class IndicatorService {
       downThreshold = -0.5,   // Target = 0 if return <= -0.5%
       includeNeutral = false  // Whether to include neutral (between thresholds)
     } = options;
+
+    // Helper function to safely format numbers
+    const safeToFixed = (val, decimals = 2) => {
+      if (val === null || val === undefined || isNaN(val)) return null;
+      return parseFloat(Number(val).toFixed(decimals));
+    };
 
     const indicators = this.calculateIndicatorsForRegression(prices);
     const dataset = [];
@@ -947,6 +1012,12 @@ class IndicatorService {
   // timeframe: aggregate daily data to N-day candles (1=daily, 3=3-day, 5=weekly, etc.)
   // Returns indicators from the day before (H-1)
   getIndicatorsForDate(prices, targetDate, timeframe = 1) {
+    // Helper function to safely format numbers
+    const safeToFixed = (val, decimals = 2) => {
+      if (val === null || val === undefined || isNaN(val)) return null;
+      return parseFloat(Number(val).toFixed(decimals));
+    };
+
     // Resample data to specified timeframe
     const resampledPrices = this.resampleToTimeframe(prices, timeframe);
     
@@ -1484,6 +1555,31 @@ class IndicatorService {
         const distFromHigh = ((high52w - prevClose) / high52w) * 100;
         
         return (distFromSup < 8 && distFromHigh > 20) ? 1 : 0;
+      })(),
+
+      // Parabolic SAR Reversal Detection
+      psar: safeToFixed(indicators.psar[prevIdx]),
+      psarAbovePrice: indicators.psar[prevIdx] && prevClose < indicators.psar[prevIdx] ? 1 : 0,
+      psarBelowPrice: indicators.psar[prevIdx] && prevClose > indicators.psar[prevIdx] ? 1 : 0,
+      psarNearPrice: (() => {
+        if (!indicators.psar[prevIdx]) return 0;
+        const distance = Math.abs(prevClose - indicators.psar[prevIdx]);
+        const percentDist = (distance / prevClose) * 100;
+        return percentDist < 2 ? 1 : 0; // Jika SAR dalam 2% dari harga
+      })(),
+      psarBearishReversal: (() => {
+        if (prevIdx < 1 || !indicators.psar[prevIdx] || !indicators.psar[prevPrevIdx]) return 0;
+        // Reversal dari bullish ke bearish: SAR cross dari bawah ke atas
+        const prevWasBullish = prevClose > indicators.psar[prevPrevIdx];
+        const nowBearish = prevClose < indicators.psar[prevIdx];
+        return (prevWasBullish && nowBearish) ? 1 : 0;
+      })(),
+      psarAboutToReversal: (() => {
+        if (!indicators.psar[prevIdx] || prevIdx < 5) return 0;
+        // Jika SAR sangat dekat (<3%) dan bergerak menuju crossing
+        const distance = Math.abs(prevClose - indicators.psar[prevIdx]);
+        const percentDist = (distance / prevClose) * 100;
+        return percentDist < 3 ? 1 : 0; // Warning signal, akan reversal
       })(),
       
       // Composite signals

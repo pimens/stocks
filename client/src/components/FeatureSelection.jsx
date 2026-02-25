@@ -175,18 +175,14 @@ const ALL_FEATURES = {
   nearSupport: { label: 'Near Support (<5%)', group: 'support', desc: '1 jika sangat dekat dengan support' },
   recoveryPotential: { label: 'Recovery Potential', group: 'support', desc: '1 jika dekat support tapi jauh dari high' },
   
-  // Composite Scores & Bullish Signals
-  bullishScore: { label: 'Bullish Score (0-10)', group: 'bullish', desc: 'Skor komposit bullish dari multi-indikator' },
-  oversoldBounce: { label: 'Oversold Bounce', group: 'bullish', desc: '1 jika oversold + candle hijau + volume' },
-  momentumShift: { label: 'Momentum Shift', group: 'bullish', desc: '1 jika MACD, RSI, DI semua bullish' },
-
-  // Price Data
-  prevClose: { label: 'Prev Close', group: 'price', desc: 'Harga close H-1' },
-  prevOpen: { label: 'Prev Open', group: 'price', desc: 'Harga open H-1' },
-  prevHigh: { label: 'Prev High', group: 'price', desc: 'Harga high H-1' },
-  prevLow: { label: 'Prev Low', group: 'price', desc: 'Harga low H-1' },
-  prevVolume: { label: 'Prev Volume', group: 'price', desc: 'Volume H-1' },
-}
+  // Parabolic SAR Reversal Detection
+  psar: { label: 'Parabolic SAR Value', group: 'reversal', desc: 'Nilai Parabolic SAR (stop & reverse)' },
+  psarAbovePrice: { label: 'SAR > Price', group: 'reversal', desc: '1 jika SAR di atas harga (downtrend)' },
+  psarBelowPrice: { label: 'SAR < Price', group: 'reversal', desc: '1 jika SAR di bawah harga (uptrend)' },
+  psarNearPrice: { label: 'SAR Dekat Harga', group: 'reversal', desc: '1 jika SAR dalam 2% dari harga' },
+  psarBearishReversal: { label: 'SAR Bearish Reversal', group: 'reversal', desc: '1 jika SAR baru saja cross (bullish→bearish)' },
+  psarAboutToReversal: { label: 'SAR Akan Reversal', group: 'reversal', desc: '1 jika SAR sangat dekat (<3%), akan terjadi crossing' },
+};
 
 // Group definitions
 const FEATURE_GROUPS = {
@@ -210,6 +206,7 @@ const FEATURE_GROUPS = {
   returns: { label: '📆 Returns', color: 'sky' },
   bullish: { label: '🔥 Bullish Signals', color: 'green' },
   support: { label: '🎯 Support & Distance', color: 'cyan' },
+  reversal: { label: '⚡ Parabolic SAR Reversal', color: 'red' },
   price: { label: '💵 Price Data', color: 'gray' },
 }
 

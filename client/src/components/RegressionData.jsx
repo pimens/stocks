@@ -192,6 +192,14 @@ const ALL_COLUMNS = {
   nearSupport: { label: 'Near Support (<5%)', group: 'support', desc: '1 jika sangat dekat dengan support' },
   recoveryPotential: { label: 'Recovery Potential', group: 'support', desc: '1 jika dekat support tapi jauh dari high' },
 
+  // Parabolic SAR Reversal Detection
+  psar: { label: 'Parabolic SAR Value', group: 'reversal', desc: 'Nilai Parabolic SAR (stop & reverse)' },
+  psarAbovePrice: { label: 'SAR > Price', group: 'reversal', desc: '1 jika SAR di atas harga (downtrend)' },
+  psarBelowPrice: { label: 'SAR < Price', group: 'reversal', desc: '1 jika SAR di bawah harga (uptrend)' },
+  psarNearPrice: { label: 'SAR Dekat Harga', group: 'reversal', desc: '1 jika SAR dalam 2% dari harga' },
+  psarBearishReversal: { label: 'SAR Bearish Reversal', group: 'reversal', desc: '1 jika SAR baru saja cross (bullish→bearish)' },
+  psarAboutToReversal: { label: 'SAR Akan Reversal', group: 'reversal', desc: '1 jika SAR sangat dekat (<3%), akan terjadi crossing' },
+
   // Composite Scores & Bullish Signals
   bullishScore: { label: 'Bullish Score (0-10)', group: 'bullish', desc: 'Skor komposit bullish dari multi-indikator' },
   oversoldBounce: { label: 'Oversold Bounce', group: 'bullish', desc: '1 jika oversold + candle hijau + volume' },
@@ -221,6 +229,7 @@ const COLUMN_GROUPS = {
   returns: { label: '📆 Returns', color: 'sky' },
   bullish: { label: '🔥 Bullish Signals', color: 'green' },
   support: { label: '🎯 Support & Distance', color: 'cyan' },
+  reversal: { label: '⚡ Parabolic SAR Reversal', color: 'red' },
 }
 
 // Stock selection now uses StockSelector component with full IDX stocks
