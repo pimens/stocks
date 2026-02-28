@@ -739,6 +739,9 @@ class IndicatorService {
         ema10: indicators.ema10[prevIdx] ? parseFloat(indicators.ema10[prevIdx].toFixed(2)) : null,
         ema12: indicators.ema12[prevIdx] ? parseFloat(indicators.ema12[prevIdx].toFixed(2)) : null,
         ema26: indicators.ema26[prevIdx] ? parseFloat(indicators.ema26[prevIdx].toFixed(2)) : null,
+        ema21: indicators.ema21[prevIdx] ? parseFloat(indicators.ema21[prevIdx].toFixed(2)) : null,
+        ema21High: indicators.ema21High[prevIdx] ? parseFloat(indicators.ema21High[prevIdx].toFixed(2)) : null,
+        ema21Low: indicators.ema21Low[prevIdx] ? parseFloat(indicators.ema21Low[prevIdx].toFixed(2)) : null,
         
         // Price vs MA signals
         priceAboveSMA5: prevClose > (indicators.sma5[prevIdx] || 0) ? 1 : 0,
@@ -747,6 +750,25 @@ class IndicatorService {
         priceAboveSMA50: prevClose > (indicators.sma50[prevIdx] || 0) ? 1 : 0,
         priceAboveEMA12: prevClose > (indicators.ema12[prevIdx] || 0) ? 1 : 0,
         priceAboveEMA26: prevClose > (indicators.ema26[prevIdx] || 0) ? 1 : 0,
+        priceAboveEMA21: prevClose > (indicators.ema21[prevIdx] || 0) ? 1 : 0,
+        priceAboveEMA21High: prevClose > (indicators.ema21High[prevIdx] || 0) ? 1 : 0,
+        priceBelowEMA21Low: prevClose < (indicators.ema21Low[prevIdx] || Infinity) ? 1 : 0,
+        
+        // Distance from EMA 21
+        distFromEMA21: indicators.ema21[prevIdx] ? parseFloat(((prevClose - indicators.ema21[prevIdx]) / indicators.ema21[prevIdx] * 100).toFixed(4)) : null,
+        distFromEMA21High: indicators.ema21High[prevIdx] ? parseFloat(((prevClose - indicators.ema21High[prevIdx]) / indicators.ema21High[prevIdx] * 100).toFixed(4)) : null,
+        distFromEMA21Low: indicators.ema21Low[prevIdx] ? parseFloat(((prevClose - indicators.ema21Low[prevIdx]) / indicators.ema21Low[prevIdx] * 100).toFixed(4)) : null,
+        
+        // EMA 21 Cross signals
+        priceCrossAboveEMA21: (prevIdx >= 1 && prices[prevIdx - 1]?.close && indicators.ema21[prevIdx - 1] && indicators.ema21[prevIdx]
+          ? (prices[prevIdx - 1].close <= indicators.ema21[prevIdx - 1] && prevClose > indicators.ema21[prevIdx] ? 1 : 0)
+          : 0),
+        priceCrossBelowEMA21: (prevIdx >= 1 && prices[prevIdx - 1]?.close && indicators.ema21[prevIdx - 1] && indicators.ema21[prevIdx]
+          ? (prices[prevIdx - 1].close >= indicators.ema21[prevIdx - 1] && prevClose < indicators.ema21[prevIdx] ? 1 : 0)
+          : 0),
+        priceCrossUpEMA21High: (prevIdx >= 1 && prices[prevIdx - 1]?.close && indicators.ema21High[prevIdx - 1] && indicators.ema21High[prevIdx]
+          ? (prices[prevIdx - 1].close <= indicators.ema21High[prevIdx - 1] && prevClose > indicators.ema21High[prevIdx] ? 1 : 0)
+          : 0),
         
         // Distance from MA (normalized) - MORE USEFUL FOR ML
         distFromSMA5: indicators.sma5[prevIdx] ? parseFloat(((prevClose - indicators.sma5[prevIdx]) / indicators.sma5[prevIdx] * 100).toFixed(4)) : null,
@@ -1193,6 +1215,9 @@ class IndicatorService {
         : 0,
       priceCrossBelowEMA21: prevPrevIdx >= 0 && prices[prevPrevIdx]?.close && indicators.ema21[prevPrevIdx] && indicators.ema21[prevIdx]
         ? (prices[prevPrevIdx].close >= indicators.ema21[prevPrevIdx] && prevClose < indicators.ema21[prevIdx] ? 1 : 0)
+        : 0,
+      priceCrossUpEMA21High: prevPrevIdx >= 0 && prices[prevPrevIdx]?.close && indicators.ema21High[prevPrevIdx] && indicators.ema21High[prevIdx]
+        ? (prices[prevPrevIdx].close <= indicators.ema21High[prevPrevIdx] && prevClose > indicators.ema21High[prevIdx] ? 1 : 0)
         : 0,
       
       // Distance from MA
