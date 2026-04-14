@@ -16,6 +16,8 @@ const ALL_FEATURES = {
 
   // Delta/Change Indicators
   deltaRSI: { label: 'ΔRSI', group: 'delta', desc: 'Perubahan RSI dari hari sebelumnya' },
+  deltaRSI7: { label: 'ΔRSI 7', group: 'delta', desc: 'Perubahan RSI 7 dari hari sebelumnya' },
+  deltaRSI21: { label: 'ΔRSI 21', group: 'delta', desc: 'Perubahan RSI 21 dari hari sebelumnya' },
   deltaMACDHist: { label: 'ΔMACD Hist', group: 'delta', desc: 'Perubahan MACD Histogram (slope)' },
   deltaStochK: { label: 'ΔStoch %K', group: 'delta', desc: 'Perubahan Stochastic %K' },
   deltaADX: { label: 'ΔADX', group: 'delta', desc: 'Perubahan ADX' },
@@ -60,6 +62,20 @@ const ALL_FEATURES = {
   rsiOversold: { label: 'RSI Oversold', group: 'rsi', desc: '1 jika RSI < 30' },
   rsiOverbought: { label: 'RSI Overbought', group: 'rsi', desc: '1 jika RSI > 70' },
   rsiNeutral: { label: 'RSI Neutral', group: 'rsi', desc: '1 jika 30 <= RSI <= 70' },
+  rsi7: { label: 'RSI 7', group: 'rsi', desc: 'Relative Strength Index (7) - short term' },
+  rsi7Oversold: { label: 'RSI 7 Oversold', group: 'rsi', desc: '1 jika RSI 7 < 30' },
+  rsi7Overbought: { label: 'RSI 7 Overbought', group: 'rsi', desc: '1 jika RSI 7 > 70' },
+  rsi7Neutral: { label: 'RSI 7 Neutral', group: 'rsi', desc: '1 jika 30 <= RSI 7 <= 70' },
+  rsi7Rising: { label: 'RSI 7 Rising', group: 'rsi', desc: '1 jika RSI 7 naik dari kemarin' },
+  rsi7ExitOversold: { label: 'RSI 7 Exit Oversold', group: 'rsi', desc: '1 jika RSI 7 baru keluar dari oversold' },
+  rsi7BullishZone: { label: 'RSI 7 Bullish Zone', group: 'rsi', desc: '1 jika RSI 7 antara 50-70' },
+  rsi21: { label: 'RSI 21', group: 'rsi', desc: 'Relative Strength Index (21) - medium term' },
+  rsi21Oversold: { label: 'RSI 21 Oversold', group: 'rsi', desc: '1 jika RSI 21 < 30' },
+  rsi21Overbought: { label: 'RSI 21 Overbought', group: 'rsi', desc: '1 jika RSI 21 > 70' },
+  rsi21Neutral: { label: 'RSI 21 Neutral', group: 'rsi', desc: '1 jika 30 <= RSI 21 <= 70' },
+  rsi21Rising: { label: 'RSI 21 Rising', group: 'rsi', desc: '1 jika RSI 21 naik dari kemarin' },
+  rsi21ExitOversold: { label: 'RSI 21 Exit Oversold', group: 'rsi', desc: '1 jika RSI 21 baru keluar dari oversold' },
+  rsi21BullishZone: { label: 'RSI 21 Bullish Zone', group: 'rsi', desc: '1 jika RSI 21 antara 50-70' },
 
   // MACD
   macd: { label: 'MACD', group: 'macd', desc: 'MACD line' },
