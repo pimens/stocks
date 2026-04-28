@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { stockApi } from '../services/api'
 import { STOCK_PRICES, PRICE_RANGES, getStocksByPriceRange } from '../data/stockPrices'
+import { US_POPULAR_STOCKS } from '../data/usStocks'
 import { FiPlus, FiTrash2, FiPlay, FiSave, FiUpload, FiDownload, FiCopy, FiCheck, FiX, FiAlertTriangle, FiInfo, FiChevronDown, FiChevronUp, FiRefreshCw, FiFilter, FiTrendingUp, FiTrendingDown } from 'react-icons/fi'
 
 // All available features for screening
@@ -701,7 +702,8 @@ const IDX30_STOCKS = [
 // Get unique sectors
 const ALL_SECTORS = [...new Set(IDX_STOCKS.map(s => s.sector))].sort()
 
-export default function RuleScreener() {
+export default function RuleScreener({ market = 'ID' }) {
+  const isUS = market === 'US'
   // Stock list
   const [stockList, setStockList] = useState('lq45') // 'lq45', 'idx30', 'sector', 'price', 'all', 'custom'
   const [customStocks, setCustomStocks] = useState('')
@@ -753,6 +755,13 @@ export default function RuleScreener() {
 
   // Get stocks based on selection
   const getSelectedStocks = useCallback(() => {
+    if (isUS) {
+      // US market: use custom or all US popular stocks
+      if (stockList === 'custom') {
+        return customStocks.split(',').map(s => s.trim().toUpperCase()).filter(s => s)
+      }
+      return US_POPULAR_STOCKS.map(s => s.code)
+    }
     switch (stockList) {
       case 'lq45':
         return LQ45_STOCKS
@@ -778,7 +787,7 @@ export default function RuleScreener() {
       default:
         return LQ45_STOCKS
     }
-  }, [stockList, customStocks, selectedSectors, selectedPriceRange])
+  }, [stockList, customStocks, selectedSectors, selectedPriceRange, isUS])
 
   // Add new rule
   const addRule = () => {
@@ -974,7 +983,7 @@ export default function RuleScreener() {
         try {
           // Fetch indicator data
           // Request nextDayForAPI to get indicators from targetDate (H-1 logic)
-          const response = await stockApi.getLiveIndicators(symbol, nextDayForAPI, false)
+          const response = await stockApi.getLiveIndicators(symbol, nextDayForAPI, false, 1, market)
           
           console.log(`[RuleScreener] ${symbol} response:`, response)
           
@@ -1179,70 +1188,99 @@ export default function RuleScreener() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Stock Selection */}
         <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-          <h3 className="text-lg font-semibold text-white mb-3">📋 Pilih Saham</h3>
+          <h3 className="text-lg font-semibold text-white mb-3">
+            {isUS ? '🇺🇸 Select US Stocks' : '🇮🇩 Pilih Saham IDX'}
+          </h3>
           
           {/* Main selection options */}
           <div className="flex flex-wrap gap-2 mb-3">
-            <button
-              onClick={() => setStockList('lq45')}
-              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                stockList === 'lq45' 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              📊 LQ45 ({LQ45_STOCKS.length})
-            </button>
-            <button
-              onClick={() => setStockList('idx30')}
-              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                stockList === 'idx30' 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              📈 IDX30 ({IDX30_STOCKS.length})
-            </button>
-            <button
-              onClick={() => setStockList('all')}
-              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                stockList === 'all' 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              🌐 Semua ({IDX_STOCKS.length})
-            </button>
-            <button
-              onClick={() => setStockList('sector')}
-              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                stockList === 'sector' 
-                  ? 'bg-green-600 text-white' 
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              🏢 Per Sektor
-            </button>
-            <button
-              onClick={() => setStockList('price')}
-              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                stockList === 'price' 
-                  ? 'bg-yellow-600 text-white' 
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              💰 Range Harga
-            </button>
-            <button
-              onClick={() => setStockList('custom')}
-              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                stockList === 'custom' 
-                  ? 'bg-purple-600 text-white' 
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              ✏️ Custom
-            </button>
+            {isUS ? (
+              <>
+                <button
+                  onClick={() => setStockList('all')}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                    stockList !== 'custom'
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  🇺🇸 Popular US ({US_POPULAR_STOCKS.length})
+                </button>
+                <button
+                  onClick={() => setStockList('custom')}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                    stockList === 'custom' 
+                      ? 'bg-purple-600 text-white' 
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  ✏️ Custom
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => setStockList('lq45')}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                    stockList === 'lq45' 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  📊 LQ45 ({LQ45_STOCKS.length})
+                </button>
+                <button
+                  onClick={() => setStockList('idx30')}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                    stockList === 'idx30' 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  📈 IDX30 ({IDX30_STOCKS.length})
+                </button>
+                <button
+                  onClick={() => setStockList('all')}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                    stockList === 'all' 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  🌐 Semua ({IDX_STOCKS.length})
+                </button>
+                <button
+                  onClick={() => setStockList('sector')}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                    stockList === 'sector' 
+                      ? 'bg-green-600 text-white' 
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  🏢 Per Sektor
+                </button>
+                <button
+                  onClick={() => setStockList('price')}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                    stockList === 'price' 
+                      ? 'bg-yellow-600 text-white' 
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  💰 Range Harga
+                </button>
+                <button
+                  onClick={() => setStockList('custom')}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                    stockList === 'custom' 
+                      ? 'bg-purple-600 text-white' 
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  ✏️ Custom
+                </button>
+              </>
+            )}
           </div>
 
           {/* Sector selection */}
@@ -1326,19 +1364,19 @@ export default function RuleScreener() {
             <div className="mt-3">
               <input
                 type="text"
-                placeholder="Masukkan kode saham, pisahkan dengan koma (contoh: BBCA, BBRI, TLKM)"
+                placeholder={isUS ? "Enter ticker symbols, comma separated (e.g. AAPL, MSFT, NVDA)" : "Masukkan kode saham, pisahkan dengan koma (contoh: BBCA, BBRI, TLKM)"}
                 value={customStocks}
                 onChange={(e) => setCustomStocks(e.target.value)}
                 className="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 text-white"
               />
               <div className="mt-2 text-xs text-gray-500">
-                {getSelectedStocks().length} saham akan di-scan
+                {getSelectedStocks().length} {isUS ? 'stocks' : 'saham'} akan di-scan
               </div>
             </div>
           )}
 
           {/* Show selected count for index-based selections */}
-          {['lq45', 'idx30', 'all'].includes(stockList) && (
+          {(isUS ? stockList !== 'custom' : ['lq45', 'idx30', 'all'].includes(stockList)) && (
             <div className="mt-2 text-xs text-gray-500">
               {getSelectedStocks().length} saham akan di-scan
             </div>
@@ -1713,7 +1751,9 @@ export default function RuleScreener() {
                     </span>
                     {(result.ohlcv?.close || result.data?.prevClose) && (
                       <span className="text-yellow-400 text-sm" title={`Close tanggal ${result.date || targetDate}`}>
-                        📊 Rp {(result.ohlcv?.close || result.data?.prevClose)?.toLocaleString('id-ID')}
+                        📊 {isUS ? '$' : 'Rp '}{isUS 
+                          ? (result.ohlcv?.close || result.data?.prevClose)?.toFixed(2)
+                          : (result.ohlcv?.close || result.data?.prevClose)?.toLocaleString('id-ID')}
                       </span>
                     )}
                     {/* Next day confirmation */}
@@ -1751,19 +1791,19 @@ export default function RuleScreener() {
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mt-2 pt-2 border-t border-yellow-500/20">
                         <div>
                           <div className="text-gray-400 text-xs">Open</div>
-                          <div className="text-white">Rp {result.ohlcv.open?.toLocaleString('id-ID') || '-'}</div>
+                          <div className="text-white">{isUS ? '$' : 'Rp '}{isUS ? result.ohlcv.open?.toFixed(2) : result.ohlcv.open?.toLocaleString('id-ID') || '-'}</div>
                         </div>
                         <div>
                           <div className="text-gray-400 text-xs">High</div>
-                          <div className="text-white">Rp {result.ohlcv.high?.toLocaleString('id-ID') || '-'}</div>
+                          <div className="text-white">{isUS ? '$' : 'Rp '}{isUS ? result.ohlcv.high?.toFixed(2) : result.ohlcv.high?.toLocaleString('id-ID') || '-'}</div>
                         </div>
                         <div>
                           <div className="text-gray-400 text-xs">Low</div>
-                          <div className="text-white">Rp {result.ohlcv.low?.toLocaleString('id-ID') || '-'}</div>
+                          <div className="text-white">{isUS ? '$' : 'Rp '}{isUS ? result.ohlcv.low?.toFixed(2) : result.ohlcv.low?.toLocaleString('id-ID') || '-'}</div>
                         </div>
                         <div>
                           <div className="text-gray-400 text-xs">Close (Basis)</div>
-                          <div className="text-yellow-400 font-semibold">Rp {result.ohlcv.close?.toLocaleString('id-ID') || '-'}</div>
+                          <div className="text-yellow-400 font-semibold">{isUS ? '$' : 'Rp '}{isUS ? result.ohlcv.close?.toFixed(2) : result.ohlcv.close?.toLocaleString('id-ID') || '-'}</div>
                         </div>
                       </div>
                     </div>
@@ -1781,24 +1821,24 @@ export default function RuleScreener() {
                         </h4>
                         <p className="text-xs text-gray-400 mb-2">
                           Harga hari berikutnya setelah tanggal target.
-                          Perubahan dihitung dari Close H ({result.ohlcv?.close?.toLocaleString('id-ID') || 'N/A'}) ke Close H+1.
+                          Perubahan dihitung dari Close H ({isUS ? '$' : 'Rp '}{isUS ? result.ohlcv?.close?.toFixed(2) : result.ohlcv?.close?.toLocaleString('id-ID') || 'N/A'}) ke Close H+1.
                         </p>
                         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
                           <div>
                             <div className="text-gray-400 text-xs">Open</div>
-                            <div className="text-white">Rp {result.nextDayData.open?.toLocaleString('id-ID')}</div>
+                            <div className="text-white">{isUS ? '$' : 'Rp '}{isUS ? result.nextDayData.open?.toFixed(2) : result.nextDayData.open?.toLocaleString('id-ID')}</div>
                           </div>
                           <div>
                             <div className="text-gray-400 text-xs">High</div>
-                            <div className="text-white">Rp {result.nextDayData.high?.toLocaleString('id-ID')}</div>
+                            <div className="text-white">{isUS ? '$' : 'Rp '}{isUS ? result.nextDayData.high?.toFixed(2) : result.nextDayData.high?.toLocaleString('id-ID')}</div>
                           </div>
                           <div>
                             <div className="text-gray-400 text-xs">Low</div>
-                            <div className="text-white">Rp {result.nextDayData.low?.toLocaleString('id-ID')}</div>
+                            <div className="text-white">{isUS ? '$' : 'Rp '}{isUS ? result.nextDayData.low?.toFixed(2) : result.nextDayData.low?.toLocaleString('id-ID')}</div>
                           </div>
                           <div>
                             <div className="text-gray-400 text-xs">Close</div>
-                            <div className="text-white">Rp {result.nextDayData.close?.toLocaleString('id-ID')}</div>
+                            <div className="text-white">{isUS ? '$' : 'Rp '}{isUS ? result.nextDayData.close?.toFixed(2) : result.nextDayData.close?.toLocaleString('id-ID')}</div>
                           </div>
                           <div>
                             <div className="text-gray-400 text-xs">Perubahan dari Basis</div>

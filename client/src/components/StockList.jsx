@@ -3,11 +3,11 @@ import { FiRefreshCw, FiTrendingUp, FiTrendingDown, FiMinus, FiEye } from 'react
 import { stockApi } from '../services/api'
 import { toast } from 'react-toastify'
 
-function StockList({ selectedStocks, stockData, setStockData, filters, isLoading, setIsLoading, onSelectStock }) {
+function StockList({ selectedStocks, stockData, setStockData, filters, isLoading, setIsLoading, onSelectStock, market = 'ID' }) {
   
   const fetchStockData = async () => {
     if (selectedStocks.length === 0) {
-      toast.warning('Pilih saham terlebih dahulu')
+      toast.warning(market === 'US' ? 'Please select stocks first' : 'Pilih saham terlebih dahulu')
       return
     }
 
@@ -18,16 +18,16 @@ function StockList({ selectedStocks, stockData, setStockData, filters, isLoading
       
       let data
       if (hasFilters) {
-        data = await stockApi.screenStocks(selectedStocks, filters)
+        data = await stockApi.screenStocks(selectedStocks, filters, market)
       } else {
-        data = await stockApi.getBatchData(selectedStocks)
+        data = await stockApi.getBatchData(selectedStocks, market)
       }
       
       setStockData(data)
-      toast.success(`Data ${data.length} saham berhasil dimuat`)
+      toast.success(`Data ${data.length} ${market === 'US' ? 'stocks' : 'saham'} loaded`)
     } catch (error) {
       console.error('Error fetching stock data:', error)
-      toast.error('Gagal mengambil data saham')
+      toast.error(market === 'US' ? 'Failed to fetch stock data' : 'Gagal mengambil data saham')
     } finally {
       setIsLoading(false)
     }
@@ -51,6 +51,7 @@ function StockList({ selectedStocks, stockData, setStockData, filters, isLoading
 
   const formatNumber = (num) => {
     if (num === undefined || num === null) return '-'
+    if (market === 'US') return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     return num.toLocaleString('id-ID')
   }
 
@@ -63,14 +64,14 @@ function StockList({ selectedStocks, stockData, setStockData, filters, isLoading
   return (
     <div className="card">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-bold">Hasil Screener</h2>
+        <h2 className="text-xl font-bold">{market === 'US' ? 'Screener Results' : 'Hasil Screener'}</h2>
         <button
           onClick={fetchStockData}
           disabled={isLoading || selectedStocks.length === 0}
           className="btn-primary flex items-center gap-2"
         >
           <FiRefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          {isLoading ? 'Memuat...' : 'Analisa Sekarang'}
+          {isLoading ? (market === 'US' ? 'Loading...' : 'Memuat...') : (market === 'US' ? 'Analyze Now' : 'Analisa Sekarang')}
         </button>
       </div>
 
@@ -78,15 +79,15 @@ function StockList({ selectedStocks, stockData, setStockData, filters, isLoading
       {selectedStocks.length === 0 && (
         <div className="text-center py-12 text-gray-400">
           <FiTrendingUp className="w-12 h-12 mx-auto mb-4 opacity-50" />
-          <p>Pilih saham terlebih dahulu dari daftar di samping</p>
-          <p className="text-sm mt-2">atau ketik kode saham secara manual</p>
+          <p>{market === 'US' ? 'Select stocks from the list on the left' : 'Pilih saham terlebih dahulu dari daftar di samping'}</p>
+          <p className="text-sm mt-2">{market === 'US' ? 'or type ticker symbols manually' : 'atau ketik kode saham secara manual'}</p>
         </div>
       )}
 
       {selectedStocks.length > 0 && stockData.length === 0 && !isLoading && (
         <div className="text-center py-12 text-gray-400">
-          <p>Klik "Analisa Sekarang" untuk memulai screening</p>
-          <p className="text-sm mt-2">{selectedStocks.length} saham dipilih</p>
+          <p>{market === 'US' ? 'Click "Analyze Now" to start screening' : 'Klik "Analisa Sekarang" untuk memulai screening'}</p>
+          <p className="text-sm mt-2">{selectedStocks.length} {market === 'US' ? 'stocks selected' : 'saham dipilih'}</p>
         </div>
       )}
 
@@ -96,13 +97,13 @@ function StockList({ selectedStocks, stockData, setStockData, filters, isLoading
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-700">
-                <th className="text-left py-3 px-2">Kode</th>
-                <th className="text-right py-3 px-2">Harga</th>
+                <th className="text-left py-3 px-2">{market === 'US' ? 'Symbol' : 'Kode'}</th>
+                <th className="text-right py-3 px-2">{market === 'US' ? 'Price' : 'Harga'}</th>
                 <th className="text-right py-3 px-2">RSI</th>
                 <th className="text-right py-3 px-2">MACD</th>
-                <th className="text-center py-3 px-2">Sinyal</th>
+                  <th className="text-center py-3 px-2">{market === 'US' ? 'Signal' : 'Sinyal'}</th>
                 <th className="text-center py-3 px-2">Score</th>
-                <th className="text-center py-3 px-2">Aksi</th>
+                <th className="text-center py-3 px-2">{market === 'US' ? 'Action' : 'Aksi'}</th>
               </tr>
             </thead>
             <tbody>
@@ -121,7 +122,7 @@ function StockList({ selectedStocks, stockData, setStockData, filters, isLoading
                     {stock.indicators?.current?.price ? (
                       <div>
                         <div className="font-medium">
-                          Rp {formatNumber(stock.indicators.current.price)}
+                          {market === 'US' ? '$' : 'Rp '}{formatNumber(stock.indicators.current.price)}
                         </div>
                       </div>
                     ) : '-'}

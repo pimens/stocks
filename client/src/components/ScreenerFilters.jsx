@@ -1,35 +1,41 @@
 import { useState } from 'react'
 import { FiFilter, FiChevronDown, FiChevronUp } from 'react-icons/fi'
 
-function ScreenerFilters({ filters, setFilters }) {
+function ScreenerFilters({ filters, setFilters, market = 'ID' }) {
   const [isExpanded, setIsExpanded] = useState(true)
+  const isUS = market === 'US'
 
   const filterOptions = [
     {
       category: 'Price Action',
       items: [
-        { key: 'priceGainToday', label: 'Harga Naik Hari Ini', type: 'boolean' },
-        { key: 'priceDropToday', label: 'Harga Turun Hari Ini', type: 'boolean' },
-        { key: 'highVolume', label: 'Volume Tinggi (>Avg)', type: 'boolean' },
-        { key: 'nearHighs', label: 'Dekat 52W High (>90%)', type: 'boolean' },
-        { key: 'nearLows', label: 'Dekat 52W Low (<10%)', type: 'boolean' },
+        { key: 'priceGainToday', label: isUS ? 'Price Up Today' : 'Harga Naik Hari Ini', type: 'boolean' },
+        { key: 'priceDropToday', label: isUS ? 'Price Down Today' : 'Harga Turun Hari Ini', type: 'boolean' },
+        { key: 'highVolume', label: isUS ? 'High Volume (>Avg)' : 'Volume Tinggi (>Avg)', type: 'boolean' },
+        { key: 'nearHighs', label: isUS ? 'Near 52W High (>90%)' : 'Dekat 52W High (>90%)', type: 'boolean' },
+        { key: 'nearLows', label: isUS ? 'Near 52W Low (<10%)' : 'Dekat 52W Low (<10%)', type: 'boolean' },
       ]
     },
     {
       category: 'Fundamental Metrics',
       items: [
-        { key: 'lowPE', label: 'P/E Rendah (<15)', type: 'boolean' },
-        { key: 'highPE', label: 'P/E Tinggi (>30)', type: 'boolean' },
-        { key: 'lowPB', label: 'P/B Rendah (<2)', type: 'boolean' },
-        { key: 'highDividend', label: 'Dividen Tinggi (>3%)', type: 'boolean' },
-        { key: 'largeCap', label: 'Large Cap (>10T)', type: 'boolean' },
-        { key: 'midCap', label: 'Mid Cap (1T-10T)', type: 'boolean' },
-        { key: 'smallCap', label: 'Small Cap (<1T)', type: 'boolean' },
+        { key: 'lowPE', label: isUS ? 'Low P/E (<15)' : 'P/E Rendah (<15)', type: 'boolean' },
+        { key: 'highPE', label: isUS ? 'High P/E (>30)' : 'P/E Tinggi (>30)', type: 'boolean' },
+        { key: 'lowPB', label: isUS ? 'Low P/B (<2)' : 'P/B Rendah (<2)', type: 'boolean' },
+        { key: 'highDividend', label: isUS ? 'High Dividend (>3%)' : 'Dividen Tinggi (>3%)', type: 'boolean' },
+        { key: 'largeCap', label: isUS ? 'Large Cap (>$100B)' : 'Large Cap (>10T)', type: 'boolean' },
+        { key: 'midCap', label: isUS ? 'Mid Cap ($10B-$100B)' : 'Mid Cap (1T-10T)', type: 'boolean' },
+        { key: 'smallCap', label: isUS ? 'Small Cap (<$10B)' : 'Small Cap (<1T)', type: 'boolean' },
       ]
     },
     {
-      category: 'Price Range Filters',
-      items: [
+      category: isUS ? 'Price Range' : 'Price Range Filters',
+      items: isUS ? [
+        { key: 'priceUnder50', label: 'Price < $50', type: 'boolean' },
+        { key: 'price50to200', label: 'Price $50-$200', type: 'boolean' },
+        { key: 'price200to500', label: 'Price $200-$500', type: 'boolean' },
+        { key: 'priceOver500', label: 'Price > $500', type: 'boolean' },
+      ] : [
         { key: 'priceUnder500', label: 'Harga < Rp 500', type: 'boolean' },
         { key: 'price500to2000', label: 'Harga Rp 500-2000', type: 'boolean' },
         { key: 'price2000to5000', label: 'Harga Rp 2000-5000', type: 'boolean' },
@@ -118,7 +124,7 @@ function ScreenerFilters({ filters, setFilters }) {
       >
         <span className="flex items-center gap-2">
           <FiFilter className="text-green-500" />
-          Filter Screener
+          {isUS ? 'Screener Filters' : 'Filter Screener'}
           {activeFiltersCount > 0 && (
             <span className="bg-green-600 text-xs px-2 py-0.5 rounded-full">
               {activeFiltersCount}
@@ -161,7 +167,7 @@ function ScreenerFilters({ filters, setFilters }) {
               onClick={clearFilters}
               className="w-full text-sm text-red-400 hover:text-red-300 mt-4"
             >
-              Reset Filter
+              {isUS ? 'Reset Filters' : 'Reset Filter'}
             </button>
           )}
         </div>

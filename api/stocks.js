@@ -28,13 +28,13 @@ module.exports = async (req, res) => {
     // GET /api/stocks/data/:symbol
     if (action === 'data' && req.method === 'GET') {
       const symbol = param || req.query.symbol;
-      const { range = '3mo', interval = '1d' } = req.query;
+      const { range = '3mo', interval = '1d', market = 'ID' } = req.query;
       
       if (!symbol) {
         return res.status(400).json({ error: 'Symbol is required' });
       }
       
-      const stockData = await stockService.getStockData(symbol, range, interval);
+      const stockData = await stockService.getStockData(symbol, range, interval, market);
       const indicators = indicatorService.calculateAllIndicators(stockData.prices);
       const signals = indicatorService.generateSignals(indicators);
       
@@ -43,19 +43,19 @@ module.exports = async (req, res) => {
 
     // POST /api/stocks/quotes
     if (action === 'quotes' && req.method === 'POST') {
-      const { symbols } = req.body;
+      const { symbols, market = 'ID' } = req.body;
       
       if (!symbols || !Array.isArray(symbols) || symbols.length === 0) {
         return res.status(400).json({ error: 'Please provide an array of stock symbols' });
       }
       
-      const quotes = await stockService.getQuote(symbols);
+      const quotes = await stockService.getQuote(symbols, market);
       return res.json(quotes);
     }
 
     // POST /api/stocks/screen
     if (action === 'screen' && req.method === 'POST') {
-      const { symbols, criteria } = req.body;
+      const { symbols, criteria, market = 'ID' } = req.body;
       
       if (!symbols || !Array.isArray(symbols) || symbols.length === 0) {
         return res.status(400).json({ error: 'Please provide an array of stock symbols' });
@@ -65,13 +65,13 @@ module.exports = async (req, res) => {
       
       for (const symbol of symbols) {
         try {
-          const stockData = await stockService.getStockData(symbol, '3mo', '1d');
+          const stockData = await stockService.getStockData(symbol, '3mo', '1d', market);
           const indicators = indicatorService.calculateAllIndicators(stockData.prices);
           const signals = indicatorService.generateSignals(indicators);
           
           let fundamentals = {};
           try {
-            const quotes = await stockService.getQuote([symbol]);
+            const quotes = await stockService.getQuote([symbol], market);
             if (quotes && quotes.length > 0) {
               fundamentals = quotes[0];
             }
@@ -101,7 +101,7 @@ module.exports = async (req, res) => {
 
     // POST /api/stocks/batch
     if (action === 'batch' && req.method === 'POST') {
-      const { symbols } = req.body;
+      const { symbols, market = 'ID' } = req.body;
       
       if (!symbols || !Array.isArray(symbols) || symbols.length === 0) {
         return res.status(400).json({ error: 'Please provide an array of stock symbols' });
@@ -111,7 +111,7 @@ module.exports = async (req, res) => {
       
       for (const symbol of symbols) {
         try {
-          const stockData = await stockService.getStockData(symbol, '3mo', '1d');
+          const stockData = await stockService.getStockData(symbol, '3mo', '1d', market);
           const indicators = indicatorService.calculateAllIndicators(stockData.prices);
           const signals = indicatorService.generateSignals(indicators);
           
@@ -191,7 +191,7 @@ module.exports = async (req, res) => {
 
     // POST /api/stocks/intraday-indicators - Get realtime intraday indicators
     if (action === 'intraday-indicators' && req.method === 'POST') {
-      const { symbol } = req.body;
+      const { symbol, market = 'ID' } = req.body;
       
       if (!symbol) {
         return res.status(400).json({ error: 'Please provide a stock symbol' });
@@ -201,7 +201,7 @@ module.exports = async (req, res) => {
       const now = new Date();
       
       // Get historical daily data
-      const stockData = await stockService.getStockData(symbol, '1y', '1d');
+      const stockData = await stockService.getStockData(symbol, '1y', '1d', market);
       
       if (!stockData.prices || stockData.prices.length < 60) {
         return res.status(400).json({ error: 'Not enough historical data for this stock' });
@@ -216,7 +216,7 @@ module.exports = async (req, res) => {
 
       // Try to get current realtime data
       try {
-        const quotes = await stockService.getQuote([symbol]);
+        const quotes = await stockService.getQuote([symbol], market);
         if (quotes && quotes.length > 0) {
           const currentQuote = quotes[0];
           
@@ -295,7 +295,7 @@ module.exports = async (req, res) => {
 
     // POST /api/stocks/live-indicators - Get live indicator data with realtime support
     if (action === 'live-indicators' && req.method === 'POST') {
-      const { symbol, targetDate, useRealtime = true, timeframe = 1 } = req.body;
+      const { symbol, targetDate, useRealtime = true, timeframe = 1, market = 'ID' } = req.body;
       
       if (!symbol) {
         return res.status(400).json({ error: 'Please provide a stock symbol' });
@@ -315,7 +315,7 @@ module.exports = async (req, res) => {
       const isToday = targetDate === today;
       
       // Get historical data
-      const stockData = await stockService.getStockData(symbol, '1y', '1d');
+      const stockData = await stockService.getStockData(symbol, '1y', '1d', market);
       
       if (!stockData.prices || stockData.prices.length < 60) {
         return res.status(400).json({ error: 'Not enough historical data for this stock' });
@@ -327,7 +327,7 @@ module.exports = async (req, res) => {
       // If targeting today and useRealtime is true, try to get current price
       if (isToday && useRealtime) {
         try {
-          const quotes = await stockService.getQuote([symbol]);
+          const quotes = await stockService.getQuote([symbol], market);
           if (quotes && quotes.length > 0) {
             const currentQuote = quotes[0];
             

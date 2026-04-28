@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { FiStar, FiChevronDown, FiChevronUp, FiDollarSign } from 'react-icons/fi'
 import { STOCK_PRICES, PRICE_RANGES, getStocksByPriceRange } from '../data/stockPrices'
+import { US_POPULAR_STOCKS, US_SECTORS } from '../data/usStocks'
 
 // Popular stocks data with sectors
 const POPULAR_STOCKS_DATA = [
@@ -46,20 +47,25 @@ const POPULAR_STOCKS_DATA = [
   { code: 'SMRA', name: 'Summarecon Agung', sector: 'property' },
 ]
 
-function PopularStocks({ selectedStocks, setSelectedStocks }) {
+function PopularStocks({ selectedStocks, setSelectedStocks, market = 'ID' }) {
   const [isExpanded, setIsExpanded] = useState(true)
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [selectedPriceRange, setSelectedPriceRange] = useState('all')
 
-  // Get stocks with prices
+  const isUS = market === 'US'
+
+  // Get stocks with prices (ID only, US has no static prices)
   const stocksWithPrices = useMemo(() => {
+    if (isUS) {
+      return US_POPULAR_STOCKS.map(stock => ({ ...stock, price: null }))
+    }
     return POPULAR_STOCKS_DATA.map(stock => ({
       ...stock,
       price: STOCK_PRICES[stock.code] || 0
     })).sort((a, b) => b.price - a.price)
-  }, [])
+  }, [isUS])
 
-  const categories = {
+  const categories = isUS ? US_SECTORS : {
     all: '📊 Semua',
     banking: '🏦 Perbankan',
     consumer: '🛒 Konsumer',
@@ -70,7 +76,13 @@ function PopularStocks({ selectedStocks, setSelectedStocks }) {
     property: '🏠 Properti'
   }
 
-  const priceCategories = {
+  const priceCategories = isUS ? {
+    all: '💰 All Prices',
+    low: '🔹 < $50',
+    mid: '📊 $50-$200',
+    high: '💎 $200-$500',
+    premium: '👑 > $500'
+  } : {
     all: '💰 Semua Harga',
     cheap: '🔹 < Rp 500',
     mid: '📊 Rp 500-2.000',
@@ -86,8 +98,8 @@ function PopularStocks({ selectedStocks, setSelectedStocks }) {
       filtered = filtered.filter(s => s.sector === selectedCategory)
     }
 
-    // Filter by price range
-    if (selectedPriceRange !== 'all') {
+    // Price filter only for ID market (US has no static prices)
+    if (!isUS && selectedPriceRange !== 'all') {
       switch (selectedPriceRange) {
         case 'cheap':
           filtered = filtered.filter(s => s.price < 500)
@@ -105,7 +117,7 @@ function PopularStocks({ selectedStocks, setSelectedStocks }) {
     }
 
     return filtered
-  }, [stocksWithPrices, selectedCategory, selectedPriceRange])
+  }, [stocksWithPrices, selectedCategory, selectedPriceRange, isUS])
 
   const toggleStock = (code) => {
     if (selectedStocks.includes(code)) {
@@ -122,11 +134,18 @@ function PopularStocks({ selectedStocks, setSelectedStocks }) {
   }
 
   const formatPrice = (price) => {
-    if (!price) return '-'
-    return 'Rp ' + price.toLocaleString('id-ID')
+    if (!price) return isUS ? 'Live' : '-'
+    return isUS ? `$${price.toFixed(2)}` : 'Rp ' + price.toLocaleString('id-ID')
   }
 
   const getPriceColor = (price) => {
+    if (!price) return 'text-gray-500'
+    if (isUS) {
+      if (price >= 500) return 'text-purple-400'
+      if (price >= 200) return 'text-blue-400'
+      if (price >= 50) return 'text-green-400'
+      return 'text-yellow-400'
+    }
     if (price >= 5000) return 'text-purple-400'
     if (price >= 2000) return 'text-blue-400'
     if (price >= 500) return 'text-green-400'
@@ -141,7 +160,7 @@ function PopularStocks({ selectedStocks, setSelectedStocks }) {
       >
         <span className="flex items-center gap-2">
           <FiStar className="text-yellow-500" />
-          Saham Populer
+          {isUS ? 'US Popular Stocks' : 'Saham Populer'}
         </span>
         {isExpanded ? <FiChevronUp /> : <FiChevronDown />}
       </button>
@@ -150,7 +169,7 @@ function PopularStocks({ selectedStocks, setSelectedStocks }) {
         <>
           {/* Category filter */}
           <div className="mt-4">
-            <p className="text-xs text-gray-400 mb-2">Filter Sektor:</p>
+            <p className="text-xs text-gray-400 mb-2">{isUS ? 'Filter Sector:' : 'Filter Sektor:'}</p>
             <div className="flex flex-wrap gap-2">
               {Object.entries(categories).map(([key, label]) => (
                 <button
@@ -168,25 +187,27 @@ function PopularStocks({ selectedStocks, setSelectedStocks }) {
             </div>
           </div>
 
-          {/* Price filter */}
-          <div className="mt-3">
-            <p className="text-xs text-gray-400 mb-2">Filter Harga:</p>
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(priceCategories).map(([key, label]) => (
-                <button
-                  key={key}
-                  onClick={() => setSelectedPriceRange(key)}
-                  className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                    selectedPriceRange === key
-                      ? 'bg-green-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
+          {/* Price filter - only for ID market */}
+          {!isUS && (
+            <div className="mt-3">
+              <p className="text-xs text-gray-400 mb-2">Filter Harga:</p>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(priceCategories).map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setSelectedPriceRange(key)}
+                    className={`text-xs px-3 py-1 rounded-full transition-colors ${
+                      selectedPriceRange === key
+                        ? 'bg-green-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Stocks grid */}
           <div className="grid grid-cols-2 gap-2 mt-4 max-h-64 overflow-y-auto">
@@ -213,7 +234,7 @@ function PopularStocks({ selectedStocks, setSelectedStocks }) {
 
           {filteredStocks.length === 0 && (
             <p className="text-center text-gray-400 text-sm py-4">
-              Tidak ada saham yang cocok dengan filter
+              {isUS ? 'No stocks match the filter' : 'Tidak ada saham yang cocok dengan filter'}
             </p>
           )}
 
@@ -221,7 +242,7 @@ function PopularStocks({ selectedStocks, setSelectedStocks }) {
             onClick={selectAll}
             className="w-full mt-3 text-sm text-blue-400 hover:text-blue-300"
           >
-            Pilih Semua ({filteredStocks.length})
+            {isUS ? `Select All (${filteredStocks.length})` : `Pilih Semua (${filteredStocks.length})`}
           </button>
         </>
       )}
@@ -230,3 +251,4 @@ function PopularStocks({ selectedStocks, setSelectedStocks }) {
 }
 
 export default PopularStocks
+

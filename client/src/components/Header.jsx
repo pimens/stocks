@@ -1,6 +1,6 @@
 import { FiTrendingUp, FiBarChart2, FiCpu, FiDatabase, FiActivity, FiZap, FiTarget, FiPackage, FiGlobe, FiFilter } from 'react-icons/fi'
 
-function Header({ activeTab, setActiveTab }) {
+function Header({ activeTab, setActiveTab, market, setMarket }) {
   const tabs = [
     { id: 'screener', label: 'Screener', icon: FiBarChart2 },
     { id: 'detail', label: 'Detail', icon: FiTrendingUp },
@@ -18,14 +18,37 @@ function Header({ activeTab, setActiveTab }) {
     <header className="bg-gray-800 border-b border-gray-700 sticky top-0 z-50">
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
-          {/* Logo */}
+          {/* Logo + Market Toggle */}
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
               <FiTrendingUp className="w-6 h-6 text-white" />
             </div>
             <div>
               <h1 className="text-xl font-bold text-white">Stock Screener</h1>
-              <p className="text-xs text-gray-400">Indonesia (IDX)</p>
+              <p className="text-xs text-gray-400">{market === 'US' ? 'US Market (NYSE/NASDAQ)' : 'Indonesia (IDX)'}</p>
+            </div>
+            {/* Market Toggle */}
+            <div className="flex items-center bg-gray-700 rounded-lg p-1 ml-2">
+              <button
+                onClick={() => setMarket('ID')}
+                className={`px-3 py-1 rounded text-sm font-semibold transition-colors ${
+                  market === 'ID'
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                🇮🇩 IDX
+              </button>
+              <button
+                onClick={() => setMarket('US')}
+                className={`px-3 py-1 rounded text-sm font-semibold transition-colors ${
+                  market === 'US'
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                🇺🇸 US
+              </button>
             </div>
           </div>
 

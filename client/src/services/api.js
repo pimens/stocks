@@ -11,28 +11,28 @@ export const stockApi = {
   },
 
   // Get stock data with indicators
-  getStockData: async (symbol, range = '3mo', interval = '1d') => {
+  getStockData: async (symbol, range = '3mo', interval = '1d', market = 'ID') => {
     const response = await axios.get(`${API_BASE}/stocks/data/${symbol}`, {
-      params: { range, interval }
+      params: { range, interval, market }
     })
     return response.data
   },
 
   // Get quotes for multiple stocks
-  getQuotes: async (symbols) => {
-    const response = await axios.post(`${API_BASE}/stocks/quotes`, { symbols })
+  getQuotes: async (symbols, market = 'ID') => {
+    const response = await axios.post(`${API_BASE}/stocks/quotes`, { symbols, market })
     return response.data
   },
 
   // Screen stocks based on criteria
-  screenStocks: async (symbols, criteria) => {
-    const response = await axios.post(`${API_BASE}/stocks/screen`, { symbols, criteria })
+  screenStocks: async (symbols, criteria, market = 'ID') => {
+    const response = await axios.post(`${API_BASE}/stocks/screen`, { symbols, criteria, market })
     return response.data
   },
 
   // Batch get data for multiple stocks
-  getBatchData: async (symbols) => {
-    const response = await axios.post(`${API_BASE}/stocks/batch`, { symbols })
+  getBatchData: async (symbols, market = 'ID') => {
+    const response = await axios.post(`${API_BASE}/stocks/batch`, { symbols, market })
     return response.data
   },
 
@@ -73,20 +73,22 @@ export const stockApi = {
 
   // Get live indicator data (supports realtime calculation for today)
   // timeframe: 1 = daily, 3 = 3-day candles, 5 = weekly equivalent, etc.
-  getLiveIndicators: async (symbol, targetDate, useRealtime = true, timeframe = 1) => {
+  getLiveIndicators: async (symbol, targetDate, useRealtime = true, timeframe = 1, market = 'ID') => {
     const response = await axios.post(`${API_BASE}/stocks/live-indicators`, {
       symbol,
       targetDate,
       useRealtime,
-      timeframe
+      timeframe,
+      market
     })
     return response.data
   },
 
   // Get intraday indicators (real-time during market hours)
-  getIntradayIndicators: async (symbol) => {
+  getIntradayIndicators: async (symbol, market = 'ID') => {
     const response = await axios.post(`${API_BASE}/stocks/intraday-indicators`, {
-      symbol
+      symbol,
+      market
     })
     return response.data
   }

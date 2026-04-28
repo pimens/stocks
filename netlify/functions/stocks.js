@@ -31,12 +31,13 @@ exports.handler = async (event, context) => {
       const symbol = param || event.queryStringParameters?.symbol;
       const range = event.queryStringParameters?.range || '3mo';
       const interval = event.queryStringParameters?.interval || '1d';
+      const market = event.queryStringParameters?.market || 'ID';
       
       if (!symbol) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Symbol is required' }) };
       }
       
-      const stockData = await stockService.getStockData(symbol, range, interval);
+      const stockData = await stockService.getStockData(symbol, range, interval, market);
       const indicators = indicatorService.calculateAllIndicators(stockData.prices);
       const signals = indicatorService.generateSignals(indicators);
       
@@ -45,19 +46,19 @@ exports.handler = async (event, context) => {
 
     // POST /api/stocks/quotes
     if (action === 'quotes' && event.httpMethod === 'POST') {
-      const { symbols } = JSON.parse(event.body || '{}');
+      const { symbols, market = 'ID' } = JSON.parse(event.body || '{}');
       
       if (!symbols || !Array.isArray(symbols) || symbols.length === 0) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Please provide an array of stock symbols' }) };
       }
       
-      const quotes = await stockService.getQuote(symbols);
+      const quotes = await stockService.getQuote(symbols, market);
       return { statusCode: 200, headers, body: JSON.stringify(quotes) };
     }
 
     // POST /api/stocks/screen
     if (action === 'screen' && event.httpMethod === 'POST') {
-      const { symbols, criteria } = JSON.parse(event.body || '{}');
+      const { symbols, criteria, market = 'ID' } = JSON.parse(event.body || '{}');
       
       if (!symbols || !Array.isArray(symbols) || symbols.length === 0) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Please provide an array of stock symbols' }) };
@@ -66,13 +67,13 @@ exports.handler = async (event, context) => {
       const results = [];
       for (const symbol of symbols) {
         try {
-          const stockData = await stockService.getStockData(symbol, '3mo', '1d');
+          const stockData = await stockService.getStockData(symbol, '3mo', '1d', market);
           const indicators = indicatorService.calculateAllIndicators(stockData.prices);
           const signals = indicatorService.generateSignals(indicators);
           
           let fundamentals = {};
           try {
-            const quotes = await stockService.getQuote([symbol]);
+            const quotes = await stockService.getQuote([symbol], market);
             if (quotes && quotes.length > 0) fundamentals = quotes[0];
           } catch (err) {}
           
@@ -89,7 +90,7 @@ exports.handler = async (event, context) => {
 
     // POST /api/stocks/batch
     if (action === 'batch' && event.httpMethod === 'POST') {
-      const { symbols } = JSON.parse(event.body || '{}');
+      const { symbols, market = 'ID' } = JSON.parse(event.body || '{}');
       
       if (!symbols || !Array.isArray(symbols) || symbols.length === 0) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Please provide an array of stock symbols' }) };
@@ -98,7 +99,7 @@ exports.handler = async (event, context) => {
       const results = [];
       for (const symbol of symbols) {
         try {
-          const stockData = await stockService.getStockData(symbol, '3mo', '1d');
+          const stockData = await stockService.getStockData(symbol, '3mo', '1d', market);
           const indicators = indicatorService.calculateAllIndicators(stockData.prices);
           const signals = indicatorService.generateSignals(indicators);
           results.push({ symbol, ...stockData, indicators, signals });
@@ -265,7 +266,7 @@ exports.handler = async (event, context) => {
 
     // POST /api/stocks/intraday-indicators
     if (action === 'intraday-indicators' && event.httpMethod === 'POST') {
-      const { symbol } = JSON.parse(event.body || '{}');
+      const { symbol, market = 'ID' } = JSON.parse(event.body || '{}');
       
       if (!symbol) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Please provide a stock symbol' }) };
@@ -274,7 +275,7 @@ exports.handler = async (event, context) => {
       const today = new Date().toISOString().split('T')[0];
       const now = new Date();
       
-      const stockData = await stockService.getStockData(symbol, '1y', '1d');
+      const stockData = await stockService.getStockData(symbol, '1y', '1d', market);
       
       if (!stockData.prices || stockData.prices.length < 60) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Not enough historical data for this stock' }) };
@@ -288,7 +289,7 @@ exports.handler = async (event, context) => {
       };
 
       try {
-        const quotes = await stockService.getQuote([symbol]);
+        const quotes = await stockService.getQuote([symbol], market);
         if (quotes && quotes.length > 0) {
           const currentQuote = quotes[0];
           
@@ -370,7 +371,7 @@ exports.handler = async (event, context) => {
 
     // POST /api/stocks/live-indicators
     if (action === 'live-indicators' && event.httpMethod === 'POST') {
-      const { symbol, targetDate, useRealtime = true, timeframe = 1 } = JSON.parse(event.body || '{}');
+      const { symbol, targetDate, useRealtime = true, timeframe = 1, market = 'ID' } = JSON.parse(event.body || '{}');
       
       if (!symbol) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Please provide a stock symbol' }) };
@@ -389,7 +390,7 @@ exports.handler = async (event, context) => {
       const today = new Date().toISOString().split('T')[0];
       const isToday = targetDate === today;
       
-      const stockData = await stockService.getStockData(symbol, '1y', '1d');
+      const stockData = await stockService.getStockData(symbol, '1y', '1d', market);
       
       if (!stockData.prices || stockData.prices.length < 60) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Not enough historical data for this stock' }) };
@@ -400,7 +401,7 @@ exports.handler = async (event, context) => {
 
       if (isToday && useRealtime) {
         try {
-          const quotes = await stockService.getQuote([symbol]);
+          const quotes = await stockService.getQuote([symbol], market);
           if (quotes && quotes.length > 0) {
             const currentQuote = quotes[0];
             const lastPrice = prices[prices.length - 1];

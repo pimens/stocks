@@ -23,15 +23,24 @@ function App() {
   const [isLoading, setIsLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('screener')
   const [filters, setFilters] = useState({})
+  const [market, setMarket] = useState('ID') // 'ID' or 'US'
 
   const handleSelectStock = (stock) => {
     setSelectedStock(stock)
     setActiveTab('detail')
   }
 
+  // Reset selected stocks and data when market changes
+  const handleMarketChange = (newMarket) => {
+    setMarket(newMarket)
+    setSelectedStocks([])
+    setStockData([])
+    setFilters({})
+  }
+
   return (
     <div className="min-h-screen">
-      <Header activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Header activeTab={activeTab} setActiveTab={setActiveTab} market={market} setMarket={handleMarketChange} />
       
       <main className="container mx-auto px-4 py-6">
         {activeTab === 'screener' && (
@@ -41,10 +50,12 @@ function App() {
               <StockInput 
                 selectedStocks={selectedStocks}
                 setSelectedStocks={setSelectedStocks}
+                market={market}
               />
               <PopularStocks 
                 selectedStocks={selectedStocks}
                 setSelectedStocks={setSelectedStocks}
+                market={market}
               />
               <ScreenerPresets 
                 setFilters={setFilters}
@@ -52,6 +63,7 @@ function App() {
               <ScreenerFilters 
                 filters={filters}
                 setFilters={setFilters}
+                market={market}
               />
             </div>
             
@@ -65,6 +77,7 @@ function App() {
                 isLoading={isLoading}
                 setIsLoading={setIsLoading}
                 onSelectStock={handleSelectStock}
+                market={market}
               />
             </div>
           </div>
@@ -109,7 +122,7 @@ function App() {
         )}
 
         {activeTab === 'rule-screener' && (
-          <RuleScreener />
+          <RuleScreener market={market} />
         )}
 
         {activeTab === 'indicator-analysis' && (
@@ -118,7 +131,7 @@ function App() {
       </main>
       
       <footer className="text-center py-4 text-gray-500 text-sm border-t border-gray-800">
-        <p>Stock Screener Indonesia &copy; 2024 | Data dari Yahoo Finance</p>
+        <p>Stock Screener IDX & US &copy; 2024 | Data dari Yahoo Finance</p>
         <p className="mt-1">Disclaimer: Bukan merupakan saran investasi</p>
       </footer>
     </div>

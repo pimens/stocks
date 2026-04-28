@@ -17,9 +17,9 @@ router.get('/popular', (req, res) => {
 router.get('/data/:symbol', async (req, res) => {
   try {
     const { symbol } = req.params;
-    const { range = '3mo', interval = '1d' } = req.query;
+    const { range = '3mo', interval = '1d', market = 'ID' } = req.query;
     
-    const stockData = await stockService.getStockData(symbol, range, interval);
+    const stockData = await stockService.getStockData(symbol, range, interval, market);
     const indicators = indicatorService.calculateAllIndicators(stockData.prices);
     const signals = indicatorService.generateSignals(indicators);
     
@@ -36,13 +36,13 @@ router.get('/data/:symbol', async (req, res) => {
 // Get real-time quotes for multiple stocks
 router.post('/quotes', async (req, res) => {
   try {
-    const { symbols } = req.body;
+    const { symbols, market = 'ID' } = req.body;
     
     if (!symbols || !Array.isArray(symbols) || symbols.length === 0) {
       return res.status(400).json({ error: 'Please provide an array of stock symbols' });
     }
     
-    const quotes = await stockService.getQuote(symbols);
+    const quotes = await stockService.getQuote(symbols, market);
     res.json(quotes);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -52,7 +52,7 @@ router.post('/quotes', async (req, res) => {
 // Screen stocks based on criteria
 router.post('/screen', async (req, res) => {
   try {
-    const { symbols, criteria } = req.body;
+    const { symbols, criteria, market = 'ID' } = req.body;
     
     if (!symbols || !Array.isArray(symbols) || symbols.length === 0) {
       return res.status(400).json({ error: 'Please provide an array of stock symbols' });
@@ -62,14 +62,14 @@ router.post('/screen', async (req, res) => {
     
     for (const symbol of symbols) {
       try {
-        const stockData = await stockService.getStockData(symbol, '3mo', '1d');
+        const stockData = await stockService.getStockData(symbol, '3mo', '1d', market);
         const indicators = indicatorService.calculateAllIndicators(stockData.prices);
         const signals = indicatorService.generateSignals(indicators);
         
         // Get fundamental data for enhanced screening
         let fundamentals = {};
         try {
-          const quotes = await stockService.getQuote([symbol]);
+          const quotes = await stockService.getQuote([symbol], market);
           if (quotes && quotes.length > 0) {
             fundamentals = quotes[0];
           }
@@ -316,7 +316,7 @@ router.post('/predict-data', async (req, res) => {
 // POST /api/stocks/intraday-indicators - Get realtime intraday indicators (market sedang berjalan)
 router.post('/intraday-indicators', async (req, res) => {
   try {
-    const { symbol } = req.body;
+    const { symbol, market = 'ID' } = req.body;
     
     if (!symbol) {
       return res.status(400).json({ error: 'Please provide a stock symbol' });
@@ -326,7 +326,7 @@ router.post('/intraday-indicators', async (req, res) => {
     const now = new Date();
     
     // Get historical daily data
-    const stockData = await stockService.getStockData(symbol, '1y', '1d');
+    const stockData = await stockService.getStockData(symbol, '1y', '1d', market);
     
     if (!stockData.prices || stockData.prices.length < 60) {
       return res.status(400).json({ error: 'Not enough historical data for this stock' });
@@ -341,7 +341,7 @@ router.post('/intraday-indicators', async (req, res) => {
 
     // Try to get current realtime data
     try {
-      const quotes = await stockService.getQuote([symbol]);
+      const quotes = await stockService.getQuote([symbol], market);
       if (quotes && quotes.length > 0) {
         const currentQuote = quotes[0];
         
@@ -434,7 +434,7 @@ router.post('/intraday-indicators', async (req, res) => {
 // POST /api/stocks/live-indicators - Get live indicator data with realtime support
 router.post('/live-indicators', async (req, res) => {
   try {
-    const { symbol, targetDate, useRealtime = true, timeframe = 1 } = req.body;
+    const { symbol, targetDate, useRealtime = true, timeframe = 1, market = 'ID' } = req.body;
     
     if (!symbol) {
       return res.status(400).json({ error: 'Please provide a stock symbol' });
@@ -454,7 +454,7 @@ router.post('/live-indicators', async (req, res) => {
     const isToday = targetDate === today;
     
     // Get historical data
-    const stockData = await stockService.getStockData(symbol, '1y', '1d');
+    const stockData = await stockService.getStockData(symbol, '1y', '1d', market);
     
     if (!stockData.prices || stockData.prices.length < 60) {
       return res.status(400).json({ error: 'Not enough historical data for this stock' });
@@ -466,7 +466,7 @@ router.post('/live-indicators', async (req, res) => {
     // If targeting today and useRealtime is true, try to get current price
     if (isToday && useRealtime) {
       try {
-        const quotes = await stockService.getQuote([symbol]);
+        const quotes = await stockService.getQuote([symbol], market);
         if (quotes && quotes.length > 0) {
           const currentQuote = quotes[0];
           

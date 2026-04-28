@@ -11,8 +11,11 @@ class StockService {
     this.yahooQuoteBase = 'https://query1.finance.yahoo.com/v7/finance/quote';
   }
 
-  // Convert Indonesian stock code to Yahoo Finance format (add .JK suffix)
-  toYahooSymbol(code) {
+  // Convert stock code to Yahoo Finance format (.JK for IDX, as-is for US)
+  toYahooSymbol(code, market = 'ID') {
+    if (market === 'US') {
+      return code.toUpperCase();
+    }
     if (!code.endsWith('.JK')) {
       return `${code.toUpperCase()}.JK`;
     }
@@ -20,8 +23,8 @@ class StockService {
   }
 
   // Get stock data from Yahoo Finance
-  async getStockData(symbol, range = '3mo', interval = '1d') {
-    const yahooSymbol = this.toYahooSymbol(symbol);
+  async getStockData(symbol, range = '3mo', interval = '1d', market = 'ID') {
+    const yahooSymbol = this.toYahooSymbol(symbol, market);
     const cacheKey = `stock_${yahooSymbol}_${range}_${interval}`;
     
     const cached = cache.get(cacheKey);
@@ -73,8 +76,8 @@ class StockService {
   }
 
   // Get real-time quote with bid/ask
-  async getQuote(symbols) {
-    const yahooSymbols = symbols.map(s => this.toYahooSymbol(s)).join(',');
+  async getQuote(symbols, market = 'ID') {
+    const yahooSymbols = symbols.map(s => this.toYahooSymbol(s, market)).join(',');
     const cacheKey = `quote_${yahooSymbols}`;
     
     const cached = cache.get(cacheKey);
@@ -95,7 +98,7 @@ class StockService {
       }
 
       const quotes = response.data.quoteResponse.result.map(q => ({
-        symbol: q.symbol.replace('.JK', ''),
+        symbol: market === 'ID' ? q.symbol.replace('.JK', '') : q.symbol,
         name: q.shortName || q.longName,
         price: q.regularMarketPrice,
         change: q.regularMarketChange,
@@ -129,7 +132,7 @@ class StockService {
       try {
         const results = [];
         for (const symbol of symbols) {
-          const stockData = await this.getStockData(symbol, '5d', '1d');
+          const stockData = await this.getStockData(symbol, '5d', '1d', market);
           const lastPrice = stockData.prices[stockData.prices.length - 1];
           results.push({
             symbol: symbol.toUpperCase(),

@@ -278,6 +278,7 @@ class IndicatorService {
     }
 
     // Price Range Filters
+    // Price Range Filters (IDX - IDR)
     if (criteria.priceUnder500 && current.price) {
       results.priceUnder500 = current.price < 500;
     }
@@ -289,6 +290,20 @@ class IndicatorService {
     }
     if (criteria.priceOver5000 && current.price) {
       results.priceOver5000 = current.price > 5000;
+    }
+
+    // Price Range Filters (US - USD)
+    if (criteria.priceUnder50 && current.price) {
+      results.priceUnder50 = current.price < 50;
+    }
+    if (criteria.price50to200 && current.price) {
+      results.price50to200 = current.price >= 50 && current.price <= 200;
+    }
+    if (criteria.price200to500 && current.price) {
+      results.price200to500 = current.price >= 200 && current.price <= 500;
+    }
+    if (criteria.priceOver500 && current.price) {
+      results.priceOver500 = current.price > 500;
     }
 
     // RSI conditions
