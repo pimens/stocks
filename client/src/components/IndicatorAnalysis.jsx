@@ -28,7 +28,7 @@ const INDICATOR_CATEGORIES = {
   },
   'MA Crossover': {
     icon: '✂️',
-    indicators: ['sma5AboveSMA10', 'sma10AboveSMA20', 'sma20AboveSMA50', 'priceCrossAboveEMA21', 'priceCrossBelowEMA21']
+    indicators: ['sma5AboveSMA10', 'sma10AboveSMA20', 'sma20AboveSMA50', 'priceCrossAboveEMA21', 'priceCrossBelowEMA21', 'priceCrossUpEMA21High']
   },
   'RSI': {
     icon: '💪',
@@ -90,6 +90,7 @@ const INDICATOR_CATEGORIES = {
 
 // Get all indicator names flattened
 const ALL_INDICATORS = Object.values(INDICATOR_CATEGORIES).flatMap(cat => cat.indicators)
+const META_INDICATOR_KEYS = new Set(['symbol', 'targetDate', 'indicatorDate', 'actualData', 'timeframe'])
 
 // Preset storage key
 const PRESETS_STORAGE_KEY = 'indicator-analysis-presets'
@@ -244,13 +245,13 @@ function IndicatorAnalysis() {
   }
 
   // Select/Deselect all
-  const selectAll = () => setSelectedIndicators(new Set(ALL_INDICATORS))
   const deselectAll = () => setSelectedIndicators(new Set())
 
   // Load preset
   const loadPreset = (preset) => {
-    setSelectedIndicators(new Set(preset.indicators))
-    toast.success(`Preset "${preset.name}" dimuat (${preset.indicators.length} indikator)`)
+    const indicatorsToLoad = preset.id === 'all-indicators' ? allIndicators : preset.indicators
+    setSelectedIndicators(new Set(indicatorsToLoad))
+    toast.success(`Preset "${preset.name}" dimuat (${indicatorsToLoad.length} indikator)`)
   }
 
   // Save new preset
@@ -388,14 +389,39 @@ function IndicatorAnalysis() {
     return String(value)
   }
 
+  // Build effective categories dynamically so newly added backend indicators also appear in UI
+  const effectiveCategories = useMemo(() => {
+    const base = Object.fromEntries(
+      Object.entries(INDICATOR_CATEGORIES).map(([cat, data]) => [cat, { ...data, indicators: [...data.indicators] }])
+    )
+
+    const known = new Set(Object.values(base).flatMap(cat => cat.indicators))
+    const apiIndicators = Object.keys(indicatorData?.data || {}).filter(key => !META_INDICATOR_KEYS.has(key))
+    const extraIndicators = apiIndicators.filter(key => !known.has(key)).sort((a, b) => a.localeCompare(b))
+
+    if (extraIndicators.length > 0) {
+      base['Indikator Lainnya'] = {
+        icon: '🧩',
+        indicators: extraIndicators
+      }
+    }
+
+    return base
+  }, [indicatorData])
+
+  const allIndicators = useMemo(
+    () => Object.values(effectiveCategories).flatMap(cat => cat.indicators),
+    [effectiveCategories]
+  )
+
   // Filter indicators by search
   const filteredCategories = useMemo(() => {
-    if (!indicatorSearch.trim()) return INDICATOR_CATEGORIES
+    if (!indicatorSearch.trim()) return effectiveCategories
     
     const search = indicatorSearch.toLowerCase()
     const result = {}
     
-    Object.entries(INDICATOR_CATEGORIES).forEach(([cat, data]) => {
+    Object.entries(effectiveCategories).forEach(([cat, data]) => {
       const filtered = data.indicators.filter(ind => 
         ind.toLowerCase().includes(search) || cat.toLowerCase().includes(search)
       )
@@ -405,7 +431,7 @@ function IndicatorAnalysis() {
     })
     
     return result
-  }, [indicatorSearch])
+  }, [indicatorSearch, effectiveCategories])
 
   // AI Models
 const aiModels = [
@@ -440,11 +466,11 @@ const aiModels = [
               <FiActivity className="text-blue-400" />
               Analisis 90+ Indikator Teknikal
             </h1>
-            <p className="text-gray-400 mt-1">Pilih saham, tanggal, dan indikator untuk dianalisis dengan AI</p>
+            <p className="text-gray-400 mt-1">Pilih saham, tanggal, dan indikator untuk dianalisis dengan AI (otomatis sinkron dengan indikator backend)</p>
           </div>
           <div className="text-right">
             <div className="text-sm text-gray-400">Total Indikator</div>
-            <div className="text-3xl font-bold text-blue-400">{ALL_INDICATORS.length}</div>
+            <div className="text-3xl font-bold text-blue-400">{allIndicators.length}</div>
           </div>
         </div>
       </div>
@@ -702,10 +728,10 @@ const aiModels = [
           <div className="card h-full flex flex-col">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-lg font-semibold flex items-center gap-2">
-                📊 Pilih Indikator ({selectedIndicators.size}/{ALL_INDICATORS.length})
+                📊 Pilih Indikator ({selectedIndicators.size}/{allIndicators.length})
               </h3>
               <div className="flex gap-2">
-                <button onClick={selectAll} className="text-xs px-2 py-1 bg-green-600/20 text-green-400 hover:bg-green-600/30 rounded">
+                <button onClick={() => setSelectedIndicators(new Set(allIndicators))} className="text-xs px-2 py-1 bg-green-600/20 text-green-400 hover:bg-green-600/30 rounded">
                   Pilih Semua
                 </button>
                 <button onClick={deselectAll} className="text-xs px-2 py-1 bg-red-600/20 text-red-400 hover:bg-red-600/30 rounded">
