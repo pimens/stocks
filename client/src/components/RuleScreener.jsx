@@ -1131,7 +1131,7 @@ export default function RuleScreener({ market = 'ID' }) {
 
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
-        <div className="bg-gray-800 rounded-lg p-4 w-[600px] max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="bg-gray-800 rounded-lg p-4 w-[95vw] max-w-[600px] max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-bold text-white">Pilih Feature</h3>
             <button onClick={onClose} className="text-gray-400 hover:text-white">
@@ -1154,7 +1154,7 @@ export default function RuleScreener({ market = 'ID' }) {
                 <h4 className="text-sm font-semibold text-gray-400 mb-2">
                   {FEATURE_GROUPS[groupKey]?.label || groupKey}
                 </h4>
-                <div className="grid grid-cols-2 gap-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
                   {features.map((feat) => (
                     <button
                       key={feat.key}
@@ -1476,9 +1476,9 @@ export default function RuleScreener({ market = 'ID' }) {
 
       {/* Rules Builder */}
       <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
           <h3 className="text-lg font-semibold text-white">🔧 Rules Builder</h3>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             {/* Logic operator */}
             <div className="flex items-center gap-2 bg-gray-700 rounded-lg p-1">
               <button
@@ -1506,26 +1506,26 @@ export default function RuleScreener({ market = 'ID' }) {
             {/* Action buttons */}
             <button
               onClick={addRule}
-              className="flex items-center gap-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded text-sm"
+              className="flex items-center justify-center gap-1 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded text-sm"
             >
               <FiPlus className="w-4 h-4" />
               Add Rule
             </button>
             <button
               onClick={() => setShowSaveModal(true)}
-              className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded text-sm"
+              className="flex items-center justify-center gap-1 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded text-sm"
             >
               <FiSave className="w-4 h-4" />
               Save
             </button>
             <button
               onClick={exportRules}
-              className="flex items-center gap-1 px-3 py-1.5 bg-gray-600 hover:bg-gray-500 text-white rounded text-sm"
+              className="flex items-center justify-center gap-1 px-3 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded text-sm"
             >
               <FiDownload className="w-4 h-4" />
               Export
             </button>
-            <label className="flex items-center gap-1 px-3 py-1.5 bg-gray-600 hover:bg-gray-500 text-white rounded text-sm cursor-pointer">
+            <label className="flex items-center justify-center gap-1 px-3 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded text-sm cursor-pointer">
               <FiUpload className="w-4 h-4" />
               Import
               <input type="file" accept=".json" onChange={importRules} className="hidden" />
@@ -1536,14 +1536,35 @@ export default function RuleScreener({ market = 'ID' }) {
         {/* Rules list */}
         <div className="space-y-2">
           {rules.map((rule, index) => (
-            <div key={rule.id} className="flex items-center gap-2 bg-gray-700/50 rounded-lg p-3">
+            <div key={rule.id} className="bg-gray-700/50 rounded-lg p-3">
+              <div className="flex items-center justify-between mb-2 sm:mb-0">
+                <span className="text-gray-400 text-xs sm:hidden">Rule {index + 1}</span>
+                <div className="flex items-center gap-1 sm:hidden">
+                  <button
+                    onClick={() => duplicateRule(rule)}
+                    className="p-2 text-gray-400 hover:text-white hover:bg-gray-600 rounded"
+                    title="Duplicate rule"
+                  >
+                    <FiCopy className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => removeRule(rule.id)}
+                    className="p-2 text-gray-400 hover:text-red-400 hover:bg-gray-600 rounded"
+                    title="Remove rule"
+                  >
+                    <FiTrash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-[32px_minmax(0,1fr)_90px_120px_minmax(0,1fr)_88px] gap-2 items-center">
               {/* Rule number */}
-              <span className="text-gray-500 text-sm w-6">{index + 1}.</span>
+              <span className="hidden sm:inline text-gray-500 text-sm w-6">{index + 1}.</span>
 
               {/* Left feature */}
               <button
                 onClick={() => setShowFeatureSelector({ ruleId: rule.id, side: 'left' })}
-                className="flex-1 max-w-[200px] px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-left"
+                className="w-full px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-left"
               >
                 <span className="text-white">{ALL_FEATURES[rule.leftFeature]?.label || rule.leftFeature}</span>
               </button>
@@ -1552,7 +1573,7 @@ export default function RuleScreener({ market = 'ID' }) {
               <select
                 value={rule.operator}
                 onChange={(e) => updateRule(rule.id, 'operator', e.target.value)}
-                className="px-3 py-2 bg-gray-700 rounded text-white font-mono"
+                className="w-full px-3 py-2 bg-gray-700 rounded text-white font-mono"
               >
                 {OPERATORS.map((op) => (
                   <option key={op.value} value={op.value}>{op.label}</option>
@@ -1563,7 +1584,7 @@ export default function RuleScreener({ market = 'ID' }) {
               <select
                 value={rule.compareType}
                 onChange={(e) => updateRule(rule.id, 'compareType', e.target.value)}
-                className="px-3 py-2 bg-gray-700 rounded text-gray-300 text-sm"
+                className="w-full px-3 py-2 bg-gray-700 rounded text-gray-300 text-sm"
               >
                 <option value="constant">Nilai</option>
                 <option value="feature">Fitur</option>
@@ -1576,36 +1597,44 @@ export default function RuleScreener({ market = 'ID' }) {
                   step="any"
                   value={rule.rightValue}
                   onChange={(e) => updateRule(rule.id, 'rightValue', e.target.value)}
-                  className="w-24 px-3 py-2 bg-gray-700 rounded text-white"
+                  className="w-full px-3 py-2 bg-gray-700 rounded text-white"
                 />
               ) : (
                 <button
                   onClick={() => setShowFeatureSelector({ ruleId: rule.id, side: 'right' })}
-                  className="flex-1 max-w-[200px] px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-left"
+                  className="w-full px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-left"
                 >
                   <span className="text-white">{ALL_FEATURES[rule.rightFeature]?.label || rule.rightFeature || 'Pilih...'}</span>
                 </button>
               )}
 
               {/* Actions */}
-              <button
-                onClick={() => duplicateRule(rule)}
-                className="p-2 text-gray-400 hover:text-white hover:bg-gray-600 rounded"
-                title="Duplicate rule"
-              >
-                <FiCopy className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => removeRule(rule.id)}
-                className="p-2 text-gray-400 hover:text-red-400 hover:bg-gray-600 rounded"
-                title="Remove rule"
-              >
-                <FiTrash2 className="w-4 h-4" />
-              </button>
+              <div className="hidden sm:flex items-center gap-1">
+                <button
+                  onClick={() => duplicateRule(rule)}
+                  className="p-2 text-gray-400 hover:text-white hover:bg-gray-600 rounded"
+                  title="Duplicate rule"
+                >
+                  <FiCopy className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => removeRule(rule.id)}
+                  className="p-2 text-gray-400 hover:text-red-400 hover:bg-gray-600 rounded"
+                  title="Remove rule"
+                >
+                  <FiTrash2 className="w-4 h-4" />
+                </button>
+              </div>
 
               {/* Logic connector (except last) */}
+              </div>
+
               {index < rules.length - 1 && (
-                <span className="text-blue-400 font-medium ml-2">{logicOperator}</span>
+                <div className="mt-2 pl-1">
+                  <span className="inline-flex text-xs sm:text-sm text-blue-400 font-medium px-2 py-0.5 rounded bg-blue-500/10">
+                    {logicOperator}
+                  </span>
+                </div>
               )}
             </div>
           ))}
