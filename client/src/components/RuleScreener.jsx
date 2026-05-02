@@ -741,6 +741,18 @@ export default function RuleScreener({ market = 'ID' }) {
   const [featureSearch, setFeatureSearch] = useState('')
   const [showAllResults, setShowAllResults] = useState(true) // Default: show all stocks
 
+  // Backtest state
+  const [backtestStartDate, setBacktestStartDate] = useState(() => {
+    const d = new Date()
+    d.setMonth(d.getMonth() - 3)
+    return d.toISOString().split('T')[0]
+  })
+  const [backtestEndDate, setBacktestEndDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [backtestLoading, setBacktestLoading] = useState(false)
+  const [backtestError, setBacktestError] = useState(null)
+  const [backtestResult, setBacktestResult] = useState(null)
+  const [showAllBacktestTrades, setShowAllBacktestTrades] = useState(false)
+
   // Load saved presets from localStorage
   useEffect(() => {
     const saved = localStorage.getItem('ruleScreenerPresets')
@@ -921,6 +933,131 @@ export default function RuleScreener({ market = 'ID' }) {
       case '==': return Math.abs(leftValue - rightValue) < 0.0001
       case '!=': return Math.abs(leftValue - rightValue) >= 0.0001
       default: return false
+    }
+  }
+
+  const runBacktest = async () => {
+    const stocks = getSelectedStocks()
+
+    if (rules.length === 0) {
+      setBacktestError('Tambahkan minimal satu rule sebelum backtest')
+      return
+    }
+
+    if (stocks.length === 0) {
+      setBacktestError('Tidak ada saham yang dipilih untuk backtest')
+      return
+    }
+
+    if (!backtestStartDate || !backtestEndDate) {
+      setBacktestError('Pilih tanggal mulai dan selesai backtest')
+      return
+    }
+
+    if (new Date(backtestStartDate) > new Date(backtestEndDate)) {
+      setBacktestError('Tanggal mulai tidak boleh lebih besar dari tanggal selesai')
+      return
+    }
+
+    setBacktestLoading(true)
+    setBacktestError(null)
+    setBacktestResult(null)
+    setShowAllBacktestTrades(false)
+
+    try {
+      const response = await stockApi.getRegressionData(stocks, backtestStartDate, backtestEndDate, {
+        includeNeutral: true,
+      })
+
+      const rows = response?.data || []
+
+      if (rows.length === 0) {
+        setBacktestError('Tidak ada data historis untuk range tanggal ini')
+        return
+      }
+
+      const evaluatedRows = rows.map((row) => {
+        const ruleResults = rules.map((rule) => ({
+          rule,
+          passed: evaluateRule(rule, row),
+        }))
+
+        const passed = logicOperator === 'AND'
+          ? ruleResults.every((r) => r.passed)
+          : ruleResults.some((r) => r.passed)
+
+        return {
+          symbol: row.symbol,
+          date: row.date,
+          returnPercent: Number(row.priceChangePercent) || 0,
+          passed,
+          passedCount: ruleResults.filter((r) => r.passed).length,
+        }
+      })
+
+      const trades = evaluatedRows
+        .filter((r) => r.passed)
+        .sort((a, b) => {
+          const d = new Date(a.date) - new Date(b.date)
+          if (d !== 0) return d
+          return a.symbol.localeCompare(b.symbol)
+        })
+
+      const wins = trades.filter((t) => t.returnPercent > 0)
+      const losses = trades.filter((t) => t.returnPercent < 0)
+      const breakeven = trades.filter((t) => t.returnPercent === 0)
+
+      const grossProfit = wins.reduce((sum, t) => sum + t.returnPercent, 0)
+      const grossLossAbs = Math.abs(losses.reduce((sum, t) => sum + t.returnPercent, 0))
+      const avgWin = wins.length ? grossProfit / wins.length : 0
+      const avgLossAbs = losses.length ? grossLossAbs / losses.length : 0
+      const totalTrades = trades.length
+      const winRate = totalTrades ? (wins.length / totalTrades) * 100 : 0
+      const avgReturnPerTrade = totalTrades
+        ? trades.reduce((sum, t) => sum + t.returnPercent, 0) / totalTrades
+        : 0
+      const expectancy = (winRate / 100) * avgWin - ((100 - winRate) / 100) * avgLossAbs
+      const profitFactor = grossLossAbs === 0 ? (grossProfit > 0 ? Infinity : 0) : grossProfit / grossLossAbs
+
+      let equity = 1
+      let peak = 1
+      let maxDrawdown = 0
+      trades.forEach((t) => {
+        equity *= (1 + t.returnPercent / 100)
+        if (equity > peak) peak = equity
+        const drawdown = ((peak - equity) / peak) * 100
+        if (drawdown > maxDrawdown) maxDrawdown = drawdown
+      })
+
+      const sortedByReturn = [...trades].sort((a, b) => b.returnPercent - a.returnPercent)
+
+      setBacktestResult({
+        startDate: backtestStartDate,
+        endDate: backtestEndDate,
+        symbolsCount: stocks.length,
+        samplesEvaluated: rows.length,
+        totalTrades,
+        wins: wins.length,
+        losses: losses.length,
+        breakeven: breakeven.length,
+        winRate,
+        expectancy,
+        avgReturnPerTrade,
+        avgWin,
+        avgLossAbs,
+        grossProfit,
+        grossLossAbs,
+        profitFactor,
+        maxDrawdown,
+        totalReturn: (equity - 1) * 100,
+        bestTrades: sortedByReturn.slice(0, 5),
+        worstTrades: sortedByReturn.slice(-5).reverse(),
+        trades,
+      })
+    } catch (err) {
+      setBacktestError(err.response?.data?.error || err.message || 'Gagal menjalankan backtest')
+    } finally {
+      setBacktestLoading(false)
     }
   }
 
@@ -1117,6 +1254,11 @@ export default function RuleScreener({ market = 'ID' }) {
     
     return result
   }, [featureSearch])
+
+  const displayedBacktestTrades = useMemo(() => {
+    if (!backtestResult?.trades) return []
+    return showAllBacktestTrades ? backtestResult.trades : backtestResult.trades.slice(0, 100)
+  }, [backtestResult, showAllBacktestTrades])
 
   // Feature selector modal
   const FeatureSelector = ({ ruleId, side, onClose }) => {
@@ -1649,6 +1791,201 @@ export default function RuleScreener({ market = 'ID' }) {
       </div>
 
       {/* Run Button */}
+      <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
+          <div>
+            <h3 className="text-lg font-semibold text-white">📈 Backtest Rule Screener</h3>
+            <p className="text-sm text-gray-400 mt-1">
+              Jalankan rule ke data historis untuk mengukur edge: win rate, expectancy, max drawdown, profit factor.
+            </p>
+          </div>
+          <button
+            onClick={runBacktest}
+            disabled={backtestLoading || rules.length === 0}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              backtestLoading || rules.length === 0
+                ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-700 text-white'
+            }`}
+          >
+            {backtestLoading ? 'Menjalankan Backtest...' : 'Run Backtest'}
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Mulai</label>
+            <input
+              type="date"
+              value={backtestStartDate}
+              onChange={(e) => setBacktestStartDate(e.target.value)}
+              max={new Date().toISOString().split('T')[0]}
+              className="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 text-white"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Selesai</label>
+            <input
+              type="date"
+              value={backtestEndDate}
+              onChange={(e) => setBacktestEndDate(e.target.value)}
+              max={new Date().toISOString().split('T')[0]}
+              className="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 text-white"
+            />
+          </div>
+        </div>
+
+        {backtestError && (
+          <div className="mt-3 bg-red-900/40 border border-red-500/40 rounded-lg p-3 text-red-300 text-sm">
+            {backtestError}
+          </div>
+        )}
+
+        {backtestResult && (
+          <div className="mt-4 space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="bg-gray-900/50 rounded-lg p-3 border border-gray-700">
+                <div className="text-xs text-gray-400">Win Rate</div>
+                <div className="text-xl font-bold text-green-400">{backtestResult.winRate.toFixed(2)}%</div>
+              </div>
+              <div className="bg-gray-900/50 rounded-lg p-3 border border-gray-700">
+                <div className="text-xs text-gray-400">Expectancy</div>
+                <div className={`text-xl font-bold ${backtestResult.expectancy >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {backtestResult.expectancy >= 0 ? '+' : ''}{backtestResult.expectancy.toFixed(3)}%
+                </div>
+              </div>
+              <div className="bg-gray-900/50 rounded-lg p-3 border border-gray-700">
+                <div className="text-xs text-gray-400">Profit Factor</div>
+                <div className="text-xl font-bold text-blue-400">
+                  {Number.isFinite(backtestResult.profitFactor) ? backtestResult.profitFactor.toFixed(2) : '∞'}
+                </div>
+              </div>
+              <div className="bg-gray-900/50 rounded-lg p-3 border border-gray-700">
+                <div className="text-xs text-gray-400">Max Drawdown</div>
+                <div className="text-xl font-bold text-orange-400">{backtestResult.maxDrawdown.toFixed(2)}%</div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="bg-gray-900/50 rounded-lg p-3 border border-gray-700">
+                <div className="text-xs text-gray-400">Trades</div>
+                <div className="text-lg font-semibold text-white">{backtestResult.totalTrades}</div>
+              </div>
+              <div className="bg-gray-900/50 rounded-lg p-3 border border-gray-700">
+                <div className="text-xs text-gray-400">Avg Return / Trade</div>
+                <div className={`text-lg font-semibold ${backtestResult.avgReturnPerTrade >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {backtestResult.avgReturnPerTrade >= 0 ? '+' : ''}{backtestResult.avgReturnPerTrade.toFixed(3)}%
+                </div>
+              </div>
+              <div className="bg-gray-900/50 rounded-lg p-3 border border-gray-700">
+                <div className="text-xs text-gray-400">Total Return</div>
+                <div className={`text-lg font-semibold ${backtestResult.totalReturn >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {backtestResult.totalReturn >= 0 ? '+' : ''}{backtestResult.totalReturn.toFixed(2)}%
+                </div>
+              </div>
+              <div className="bg-gray-900/50 rounded-lg p-3 border border-gray-700">
+                <div className="text-xs text-gray-400">Data Coverage</div>
+                <div className="text-lg font-semibold text-white">{backtestResult.samplesEvaluated} sampel</div>
+              </div>
+            </div>
+
+            <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3 text-sm">
+              <p className="text-blue-300">
+                <strong>Arti Trades {backtestResult.totalTrades}:</strong> ada {backtestResult.totalTrades} kejadian saat rule Anda <strong>lolos</strong> pada tanggal sinyal.
+                Setiap kejadian lalu dicek return <strong>hari berikutnya (H+1)</strong> untuk menentukan win/loss.
+              </p>
+              <p className="text-xs text-gray-300 mt-1">
+                Jadi ini bukan jumlah saham unik, tetapi jumlah event sinyal yang lolos sepanjang periode backtest.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-3">
+                <h4 className="text-sm font-semibold text-green-400 mb-2">Top 5 Trade</h4>
+                <div className="space-y-1">
+                  {backtestResult.bestTrades.length === 0 && <div className="text-xs text-gray-400">Belum ada trade lolos rule</div>}
+                  {backtestResult.bestTrades.map((t, i) => (
+                    <div key={`${t.symbol}-${t.date}-${i}`} className="flex justify-between text-sm">
+                      <span className="text-gray-200">{t.symbol} • {t.date?.split('T')[0]}</span>
+                      <span className="text-green-400 font-medium">+{t.returnPercent.toFixed(2)}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-3">
+                <h4 className="text-sm font-semibold text-red-400 mb-2">Worst 5 Trade</h4>
+                <div className="space-y-1">
+                  {backtestResult.worstTrades.length === 0 && <div className="text-xs text-gray-400">Belum ada trade lolos rule</div>}
+                  {backtestResult.worstTrades.map((t, i) => (
+                    <div key={`${t.symbol}-${t.date}-${i}`} className="flex justify-between text-sm">
+                      <span className="text-gray-200">{t.symbol} • {t.date?.split('T')[0]}</span>
+                      <span className="text-red-400 font-medium">{t.returnPercent.toFixed(2)}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gray-900/40 border border-gray-700 rounded-lg p-3">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+                <h4 className="text-sm font-semibold text-white">📋 Detail Trades (Sinyal -&gt; Return H+1)</h4>
+                {backtestResult.trades.length > 100 && (
+                  <button
+                    onClick={() => setShowAllBacktestTrades((v) => !v)}
+                    className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-200"
+                  >
+                    {showAllBacktestTrades ? 'Tampilkan 100 pertama' : `Tampilkan semua (${backtestResult.trades.length})`}
+                  </button>
+                )}
+              </div>
+
+              {backtestResult.trades.length === 0 ? (
+                <div className="text-xs text-gray-400">Belum ada trade yang lolos rule pada periode ini.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-gray-400 border-b border-gray-700">
+                        <th className="py-2 pr-3">#</th>
+                        <th className="py-2 pr-3">Symbol</th>
+                        <th className="py-2 pr-3">Tanggal Sinyal</th>
+                        <th className="py-2 pr-3">Rule Lolos</th>
+                        <th className="py-2 pr-3">Return H+1</th>
+                        <th className="py-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {displayedBacktestTrades.map((t, i) => (
+                        <tr key={`${t.symbol}-${t.date}-${i}`} className="border-b border-gray-800/70">
+                          <td className="py-2 pr-3 text-gray-500">{i + 1}</td>
+                          <td className="py-2 pr-3 text-white font-medium">{t.symbol}</td>
+                          <td className="py-2 pr-3 text-gray-300">{t.date?.split('T')[0] || '-'}</td>
+                          <td className="py-2 pr-3 text-gray-300">{t.passedCount}/{rules.length}</td>
+                          <td className={`py-2 pr-3 font-medium ${t.returnPercent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {t.returnPercent >= 0 ? '+' : ''}{t.returnPercent.toFixed(2)}%
+                          </td>
+                          <td className="py-2">
+                            <span className={`text-xs px-2 py-0.5 rounded ${
+                              t.returnPercent > 0
+                                ? 'bg-green-500/20 text-green-300'
+                                : t.returnPercent < 0
+                                  ? 'bg-red-500/20 text-red-300'
+                                  : 'bg-gray-500/20 text-gray-300'
+                            }`}>
+                              {t.returnPercent > 0 ? 'Win' : t.returnPercent < 0 ? 'Loss' : 'BE'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="flex justify-center">
         <button
           onClick={runScreener}
