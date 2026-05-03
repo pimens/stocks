@@ -19,6 +19,7 @@ const ALL_COLUMNS = {
   priceChangePercent: { label: 'Price Change %', group: 'basic', desc: 'Perubahan harga (%)' },
   prevClose: { label: 'Prev Close', group: 'basic', desc: 'Harga close H-1' },
   currentClose: { label: 'Current Close', group: 'basic', desc: 'Harga close hari H' },
+  currentOpen: { label: 'Current Open', group: 'basic', desc: 'Harga open hari H' },
   prevOpen: { label: 'Prev Open', group: 'basic', desc: 'Harga open H-1' },
   prevHigh: { label: 'Prev High', group: 'basic', desc: 'Harga high H-1' },
   prevLow: { label: 'Prev Low', group: 'basic', desc: 'Harga low H-1' },

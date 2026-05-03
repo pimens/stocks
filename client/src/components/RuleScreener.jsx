@@ -273,6 +273,19 @@ const OPERATORS = [
   { value: '!=', label: '!=' },
 ]
 
+const BACKTEST_WIN_CRITERIA = {
+  return_h1_positive: {
+    label: 'Win jika Return H+1 > 0%',
+    metricShort: 'Return H+1',
+    metricLong: 'Return H+1 (close vs prev close)',
+  },
+  gapup_open_prevclose: {
+    label: 'Win jika Current Open > Prev Close (Gap Up Open)',
+    metricShort: 'Gap Open',
+    metricLong: 'Gap Open % (current open vs prev close)',
+  },
+}
+
 // Preset screening rules
 const PRESET_RULES = {
   // ============ RECOMMENDED: BEST BULLISH DETECTION PRESETS ============
@@ -752,6 +765,7 @@ export default function RuleScreener({ market = 'ID' }) {
   const [backtestError, setBacktestError] = useState(null)
   const [backtestResult, setBacktestResult] = useState(null)
   const [showAllBacktestTrades, setShowAllBacktestTrades] = useState(false)
+  const [backtestWinCriteria, setBacktestWinCriteria] = useState('return_h1_positive')
 
   // Load saved presets from localStorage
   useEffect(() => {
@@ -990,6 +1004,11 @@ export default function RuleScreener({ market = 'ID' }) {
           symbol: row.symbol,
           date: row.date,
           returnPercent: Number(row.priceChangePercent) || 0,
+          currentOpen: Number(row.currentOpen) || 0,
+          prevClose: Number(row.prevClose) || 0,
+          gapOpenPercent: Number(row.prevClose)
+            ? (((Number(row.currentOpen) || 0) - Number(row.prevClose)) / Number(row.prevClose)) * 100
+            : 0,
           passed,
           passedCount: ruleResults.filter((r) => r.passed).length,
         }
@@ -1003,18 +1022,46 @@ export default function RuleScreener({ market = 'ID' }) {
           return a.symbol.localeCompare(b.symbol)
         })
 
-      const wins = trades.filter((t) => t.returnPercent > 0)
-      const losses = trades.filter((t) => t.returnPercent < 0)
-      const breakeven = trades.filter((t) => t.returnPercent === 0)
+      const tradesWithOutcome = trades.map((trade) => {
+        const outcomePercent = backtestWinCriteria === 'gapup_open_prevclose'
+          ? trade.gapOpenPercent
+          : trade.returnPercent
 
-      const grossProfit = wins.reduce((sum, t) => sum + t.returnPercent, 0)
-      const grossLossAbs = Math.abs(losses.reduce((sum, t) => sum + t.returnPercent, 0))
+        let isWin = false
+        let isLoss = false
+        let isBreakeven = false
+
+        if (backtestWinCriteria === 'gapup_open_prevclose') {
+          isWin = trade.currentOpen > trade.prevClose
+          isLoss = trade.currentOpen < trade.prevClose
+          isBreakeven = trade.currentOpen === trade.prevClose
+        } else {
+          isWin = trade.returnPercent > 0
+          isLoss = trade.returnPercent < 0
+          isBreakeven = trade.returnPercent === 0
+        }
+
+        return {
+          ...trade,
+          outcomePercent,
+          isWin,
+          isLoss,
+          isBreakeven,
+        }
+      })
+
+      const wins = tradesWithOutcome.filter((t) => t.isWin)
+      const losses = tradesWithOutcome.filter((t) => t.isLoss)
+      const breakeven = tradesWithOutcome.filter((t) => t.isBreakeven)
+
+      const grossProfit = wins.reduce((sum, t) => sum + t.outcomePercent, 0)
+      const grossLossAbs = Math.abs(losses.reduce((sum, t) => sum + t.outcomePercent, 0))
       const avgWin = wins.length ? grossProfit / wins.length : 0
       const avgLossAbs = losses.length ? grossLossAbs / losses.length : 0
       const totalTrades = trades.length
       const winRate = totalTrades ? (wins.length / totalTrades) * 100 : 0
       const avgReturnPerTrade = totalTrades
-        ? trades.reduce((sum, t) => sum + t.returnPercent, 0) / totalTrades
+        ? tradesWithOutcome.reduce((sum, t) => sum + t.outcomePercent, 0) / totalTrades
         : 0
       const expectancy = (winRate / 100) * avgWin - ((100 - winRate) / 100) * avgLossAbs
       const profitFactor = grossLossAbs === 0 ? (grossProfit > 0 ? Infinity : 0) : grossProfit / grossLossAbs
@@ -1022,18 +1069,19 @@ export default function RuleScreener({ market = 'ID' }) {
       let equity = 1
       let peak = 1
       let maxDrawdown = 0
-      trades.forEach((t) => {
-        equity *= (1 + t.returnPercent / 100)
+      tradesWithOutcome.forEach((t) => {
+        equity *= (1 + t.outcomePercent / 100)
         if (equity > peak) peak = equity
         const drawdown = ((peak - equity) / peak) * 100
         if (drawdown > maxDrawdown) maxDrawdown = drawdown
       })
 
-      const sortedByReturn = [...trades].sort((a, b) => b.returnPercent - a.returnPercent)
+      const sortedByOutcome = [...tradesWithOutcome].sort((a, b) => b.outcomePercent - a.outcomePercent)
 
       setBacktestResult({
         startDate: backtestStartDate,
         endDate: backtestEndDate,
+        winCriteria: backtestWinCriteria,
         symbolsCount: stocks.length,
         samplesEvaluated: rows.length,
         totalTrades,
@@ -1050,9 +1098,9 @@ export default function RuleScreener({ market = 'ID' }) {
         profitFactor,
         maxDrawdown,
         totalReturn: (equity - 1) * 100,
-        bestTrades: sortedByReturn.slice(0, 5),
-        worstTrades: sortedByReturn.slice(-5).reverse(),
-        trades,
+        bestTrades: sortedByOutcome.slice(0, 5),
+        worstTrades: sortedByOutcome.slice(-5).reverse(),
+        trades: tradesWithOutcome,
       })
     } catch (err) {
       setBacktestError(err.response?.data?.error || err.message || 'Gagal menjalankan backtest')
@@ -1835,6 +1883,22 @@ export default function RuleScreener({ market = 'ID' }) {
           </div>
         </div>
 
+        <div className="mt-3">
+          <label className="block text-sm text-gray-400 mb-1">Definisi Win</label>
+          <select
+            value={backtestWinCriteria}
+            onChange={(e) => setBacktestWinCriteria(e.target.value)}
+            className="w-full md:w-auto px-3 py-2 bg-gray-700 rounded border border-gray-600 text-white"
+          >
+            {Object.entries(BACKTEST_WIN_CRITERIA).map(([value, cfg]) => (
+              <option key={value} value={value}>{cfg.label}</option>
+            ))}
+          </select>
+          <p className="text-xs text-gray-400 mt-1">
+            Pilih kriteria menang untuk kebutuhan strategi (close positif atau gap-up saat open).
+          </p>
+        </div>
+
         {backtestError && (
           <div className="mt-3 bg-red-900/40 border border-red-500/40 rounded-lg p-3 text-red-300 text-sm">
             {backtestError}
@@ -1892,7 +1956,7 @@ export default function RuleScreener({ market = 'ID' }) {
             <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3 text-sm">
               <p className="text-blue-300">
                 <strong>Arti Trades {backtestResult.totalTrades}:</strong> ada {backtestResult.totalTrades} kejadian saat rule Anda <strong>lolos</strong> pada tanggal sinyal.
-                Setiap kejadian lalu dicek return <strong>hari berikutnya (H+1)</strong> untuk menentukan win/loss.
+                Setiap kejadian lalu dicek metrik <strong>{BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.metricLong || BACKTEST_WIN_CRITERIA.return_h1_positive.metricLong}</strong> untuk menentukan win/loss.
               </p>
               <p className="text-xs text-gray-300 mt-1">
                 Jadi ini bukan jumlah saham unik, tetapi jumlah event sinyal yang lolos sepanjang periode backtest.
@@ -1907,7 +1971,9 @@ export default function RuleScreener({ market = 'ID' }) {
                   {backtestResult.bestTrades.map((t, i) => (
                     <div key={`${t.symbol}-${t.date}-${i}`} className="flex justify-between text-sm">
                       <span className="text-gray-200">{t.symbol} • {t.date?.split('T')[0]}</span>
-                      <span className="text-green-400 font-medium">+{t.returnPercent.toFixed(2)}%</span>
+                      <span className="text-green-400 font-medium">
+                        {t.outcomePercent >= 0 ? '+' : ''}{t.outcomePercent.toFixed(2)}%
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -1919,7 +1985,7 @@ export default function RuleScreener({ market = 'ID' }) {
                   {backtestResult.worstTrades.map((t, i) => (
                     <div key={`${t.symbol}-${t.date}-${i}`} className="flex justify-between text-sm">
                       <span className="text-gray-200">{t.symbol} • {t.date?.split('T')[0]}</span>
-                      <span className="text-red-400 font-medium">{t.returnPercent.toFixed(2)}%</span>
+                      <span className="text-red-400 font-medium">{t.outcomePercent.toFixed(2)}%</span>
                     </div>
                   ))}
                 </div>
@@ -1928,7 +1994,9 @@ export default function RuleScreener({ market = 'ID' }) {
 
             <div className="bg-gray-900/40 border border-gray-700 rounded-lg p-3">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
-                <h4 className="text-sm font-semibold text-white">📋 Detail Trades (Sinyal -&gt; Return H+1)</h4>
+                <h4 className="text-sm font-semibold text-white">
+                  📋 Detail Trades (Sinyal -&gt; {BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.metricShort || BACKTEST_WIN_CRITERIA.return_h1_positive.metricShort})
+                </h4>
                 {backtestResult.trades.length > 100 && (
                   <button
                     onClick={() => setShowAllBacktestTrades((v) => !v)}
@@ -1950,7 +2018,7 @@ export default function RuleScreener({ market = 'ID' }) {
                         <th className="py-2 pr-3">Symbol</th>
                         <th className="py-2 pr-3">Tanggal Sinyal</th>
                         <th className="py-2 pr-3">Rule Lolos</th>
-                        <th className="py-2 pr-3">Return H+1</th>
+                        <th className="py-2 pr-3">{BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.metricShort || BACKTEST_WIN_CRITERIA.return_h1_positive.metricShort}</th>
                         <th className="py-2">Status</th>
                       </tr>
                     </thead>
@@ -1961,18 +2029,18 @@ export default function RuleScreener({ market = 'ID' }) {
                           <td className="py-2 pr-3 text-white font-medium">{t.symbol}</td>
                           <td className="py-2 pr-3 text-gray-300">{t.date?.split('T')[0] || '-'}</td>
                           <td className="py-2 pr-3 text-gray-300">{t.passedCount}/{rules.length}</td>
-                          <td className={`py-2 pr-3 font-medium ${t.returnPercent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                            {t.returnPercent >= 0 ? '+' : ''}{t.returnPercent.toFixed(2)}%
+                          <td className={`py-2 pr-3 font-medium ${t.outcomePercent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {t.outcomePercent >= 0 ? '+' : ''}{t.outcomePercent.toFixed(2)}%
                           </td>
                           <td className="py-2">
                             <span className={`text-xs px-2 py-0.5 rounded ${
-                              t.returnPercent > 0
+                              t.isWin
                                 ? 'bg-green-500/20 text-green-300'
-                                : t.returnPercent < 0
+                                : t.isLoss
                                   ? 'bg-red-500/20 text-red-300'
                                   : 'bg-gray-500/20 text-gray-300'
                             }`}>
-                              {t.returnPercent > 0 ? 'Win' : t.returnPercent < 0 ? 'Loss' : 'BE'}
+                              {t.isWin ? 'Win' : t.isLoss ? 'Loss' : 'BE'}
                             </span>
                           </td>
                         </tr>

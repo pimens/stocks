@@ -660,6 +660,7 @@ class IndicatorService {
 
       const prevClose = prices[i - 1].close;
       const currentClose = prices[i].close;
+      const currentOpen = prices[i].open;
       const priceChange = currentClose - prevClose;
       const priceChangePercent = ((currentClose - prevClose) / prevClose) * 100;
 
@@ -732,6 +733,7 @@ class IndicatorService {
         priceChangePercent: parseFloat(priceChangePercent.toFixed(4)),
         prevClose: parseFloat(prevClose.toFixed(2)),
         currentClose: parseFloat(currentClose.toFixed(2)),
+        currentOpen: parseFloat(currentOpen?.toFixed(2) || 0),
         prevOpen: parseFloat(prevOpen?.toFixed(2) || 0),
         prevHigh: parseFloat(prevHigh?.toFixed(2) || 0),
         prevLow: parseFloat(prevLow?.toFixed(2) || 0),

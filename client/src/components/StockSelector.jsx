@@ -332,14 +332,38 @@ export default function StockSelector({
   const [expandedSectors, setExpandedSectors] = useState(new Set())
   const [viewMode, setViewMode] = useState('price') // 'price' or 'sector'
   const [lastUpdate, setLastUpdate] = useState(new Date())
+  const [manualSymbolsInput, setManualSymbolsInput] = useState('')
+  const [manualInputFeedback, setManualInputFeedback] = useState('')
+
+  // Merge curated IDX list with all symbols from static price dataset.
+  // This ensures screens like ML Train can access the broader symbol universe.
+  const allStocks = useMemo(() => {
+    const stockMap = new Map()
+
+    IDX_STOCKS.forEach((stock) => {
+      stockMap.set(stock.code, stock)
+    })
+
+    Object.keys(STOCK_PRICES).forEach((code) => {
+      if (!stockMap.has(code)) {
+        stockMap.set(code, {
+          code,
+          name: `Saham ${code}`,
+          sector: 'Others'
+        })
+      }
+    })
+
+    return Array.from(stockMap.values())
+  }, [])
 
   // Filter stocks based on excludeIndex prop
   const availableStocks = useMemo(() => {
     if (excludeIndex) {
-      return IDX_STOCKS.filter(s => !s.isIndex)
+      return allStocks.filter(s => !s.isIndex)
     }
-    return IDX_STOCKS
-  }, [excludeIndex])
+    return allStocks
+  }, [excludeIndex, allStocks])
 
   // Fetch all stock prices (optional - can use static data)
   const fetchPrices = useCallback(async () => {
@@ -458,7 +482,7 @@ export default function StockSelector({
       stock.name.toLowerCase().includes(term) ||
       stock.sector.toLowerCase().includes(term)
     )
-  }, [searchTerm])
+  }, [searchTerm, availableStocks])
 
   // Handle stock selection
   const handleSelect = (code) => {
@@ -473,6 +497,42 @@ export default function StockSelector({
       }
     } else {
       onSelect(code === selectedStocks[0] ? [] : [code])
+    }
+  }
+
+  // Add stock symbols from free text, separated by commas.
+  const addManualSymbols = () => {
+    const parsed = manualSymbolsInput
+      .split(/[;,\n]+/)
+      .map((symbol) => symbol.trim().toUpperCase())
+      .filter(Boolean)
+
+    if (parsed.length === 0) {
+      setManualInputFeedback('Masukkan minimal 1 kode saham, contoh: PSKT,MINA')
+      return
+    }
+
+    const uniqueParsed = [...new Set(parsed)]
+
+    if (!multiple) {
+      onSelect([uniqueParsed[0]])
+      setManualSymbolsInput('')
+      setManualInputFeedback(`Memilih 1 saham: ${uniqueParsed[0]}`)
+      return
+    }
+
+    const merged = [...new Set([...selectedStocks, ...uniqueParsed])]
+    const finalSelection = maxSelect ? merged.slice(0, maxSelect) : merged
+    const addedCount = finalSelection.filter((code) => !selectedStocks.includes(code)).length
+    const droppedCount = merged.length - finalSelection.length
+
+    onSelect(finalSelection)
+    setManualSymbolsInput('')
+
+    if (droppedCount > 0) {
+      setManualInputFeedback(`Tambah ${addedCount} saham. ${droppedCount} kode tidak ditambahkan karena batas maksimal.`)
+    } else {
+      setManualInputFeedback(`Tambah ${addedCount} saham dari input manual.`)
     }
   }
 
@@ -560,6 +620,38 @@ export default function StockSelector({
   if (compact) {
     return (
       <div className="space-y-2">
+        <div className="space-y-2 rounded-lg border border-gray-700/80 bg-gray-800/40 p-2">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={manualSymbolsInput}
+              onChange={(e) => {
+                setManualSymbolsInput(e.target.value)
+                if (manualInputFeedback) setManualInputFeedback('')
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  addManualSymbols()
+                }
+              }}
+              placeholder="Input manual: PSKT,MINA,DST"
+              className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+            />
+            <button
+              type="button"
+              onClick={addManualSymbols}
+              className="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition"
+            >
+              Tambah
+            </button>
+          </div>
+          <p className="text-xs text-gray-400">Pisahkan kode dengan koma. Contoh: PSKT, MINA, GOTO</p>
+          {manualInputFeedback && (
+            <p className="text-xs text-cyan-300">{manualInputFeedback}</p>
+          )}
+        </div>
+
         <div className="relative">
           <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
@@ -611,7 +703,7 @@ export default function StockSelector({
         <div>
           <h3 className="text-lg font-semibold text-white">📈 Pilih Saham</h3>
           <p className="text-sm text-gray-400">
-            {selectedStocks.length} dipilih dari {IDX_STOCKS.length} saham
+            {selectedStocks.length} dipilih dari {availableStocks.length} saham
             {maxSelect && ` (max: ${maxSelect})`}
           </p>
         </div>
@@ -672,11 +764,44 @@ export default function StockSelector({
         </div>
       </div>
 
+      {/* Manual Symbol Input */}
+      <div className="rounded-lg border border-gray-700/80 bg-gray-800/40 p-3 space-y-2">
+        <div className="flex flex-col md:flex-row gap-2">
+          <input
+            type="text"
+            value={manualSymbolsInput}
+            onChange={(e) => {
+              setManualSymbolsInput(e.target.value)
+              if (manualInputFeedback) setManualInputFeedback('')
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                addManualSymbols()
+              }
+            }}
+            placeholder="Input manual kode saham (pakai koma): PSKT,MINA,GOTO"
+            className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+          />
+          <button
+            type="button"
+            onClick={addManualSymbols}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition whitespace-nowrap"
+          >
+            Tambah Manual
+          </button>
+        </div>
+        <p className="text-xs text-gray-400">Contoh: PSKT, MINA, BBCA. Huruf kecil akan otomatis dijadikan huruf besar.</p>
+        {manualInputFeedback && (
+          <p className="text-xs text-cyan-300">{manualInputFeedback}</p>
+        )}
+      </div>
+
       {/* Selected Stocks Preview */}
       {selectedStocks.length > 0 && (
         <div className="flex flex-wrap gap-1 p-2 bg-gray-700/30 rounded-lg max-h-24 overflow-y-auto">
           {selectedStocks.map(code => {
-            const stock = IDX_STOCKS.find(s => s.code === code)
+            const stock = availableStocks.find(s => s.code === code)
             return (
               <span
                 key={code}
