@@ -767,8 +767,12 @@ export default function RuleScreener({ market = 'ID' }) {
   const [backtestResult, setBacktestResult] = useState(null)
   const [showAllBacktestTrades, setShowAllBacktestTrades] = useState(false)
   const [backtestWinCriteria, setBacktestWinCriteria] = useState('return_h1_positive')
+  const [screenerWinCriteria, setScreenerWinCriteria] = useState('return_h1_positive')
+  const [backtestHistory, setBacktestHistory] = useState([])
+  const [showBacktestHistory, setShowBacktestHistory] = useState(false)
+  const [expandedHistoryId, setExpandedHistoryId] = useState(null)
 
-  // Load saved presets from localStorage
+  // Load saved presets & history from localStorage
   useEffect(() => {
     const saved = localStorage.getItem('ruleScreenerPresets')
     if (saved) {
@@ -776,6 +780,14 @@ export default function RuleScreener({ market = 'ID' }) {
         setSavedPresets(JSON.parse(saved))
       } catch (e) {
         console.error('Failed to load presets:', e)
+      }
+    }
+    const savedHistory = localStorage.getItem('backtestHistory')
+    if (savedHistory) {
+      try {
+        setBacktestHistory(JSON.parse(savedHistory))
+      } catch (e) {
+        console.error('Failed to load backtest history:', e)
       }
     }
   }, [])
@@ -1159,6 +1171,43 @@ export default function RuleScreener({ market = 'ID' }) {
     XLSX.writeFile(wb, filename)
   }
 
+  const saveBacktestToHistory = () => {
+    if (!backtestResult) return
+    const entry = {
+      id: Date.now(),
+      savedAt: new Date().toISOString(),
+      name: `Backtest ${backtestResult.startDate} ~ ${backtestResult.endDate}`,
+      market: market,
+      logicOperator,
+      rules: rules.map(({ id, ...rest }) => rest),
+      winCriteria: backtestResult.winCriteria,
+      winCriteriaLabel: BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.label || backtestResult.winCriteria,
+      startDate: backtestResult.startDate,
+      endDate: backtestResult.endDate,
+      symbolsCount: backtestResult.symbolsCount,
+      samplesEvaluated: backtestResult.samplesEvaluated,
+      totalTrades: backtestResult.totalTrades,
+      wins: backtestResult.wins,
+      losses: backtestResult.losses,
+      breakeven: backtestResult.breakeven,
+      winRate: backtestResult.winRate,
+      expectancy: backtestResult.expectancy,
+      avgReturnPerTrade: backtestResult.avgReturnPerTrade,
+      avgWin: backtestResult.avgWin,
+      avgLossAbs: backtestResult.avgLossAbs,
+      grossProfit: backtestResult.grossProfit,
+      grossLossAbs: backtestResult.grossLossAbs,
+      profitFactor: backtestResult.profitFactor,
+      maxDrawdown: backtestResult.maxDrawdown,
+      totalReturn: backtestResult.totalReturn,
+      bestTrades: backtestResult.bestTrades,
+      worstTrades: backtestResult.worstTrades,
+    }
+    const updated = [entry, ...backtestHistory].slice(0, 50) // max 50 history
+    setBacktestHistory(updated)
+    localStorage.setItem('backtestHistory', JSON.stringify(updated))
+  }
+
   // Run screening
   const runScreener = async () => {
     if (rules.length === 0) {
@@ -1357,6 +1406,33 @@ export default function RuleScreener({ market = 'ID' }) {
     if (!backtestResult?.trades) return []
     return showAllBacktestTrades ? backtestResult.trades : backtestResult.trades.slice(0, 100)
   }, [backtestResult, showAllBacktestTrades])
+
+  const allResultsWithCriteria = useMemo(() => {
+    return allResults.map(result => {
+      if (!result.nextDayData) return result
+      let actuallyUp
+      let outcomeDisplayPct
+      const prevClose = result.ohlcv?.close || result.data?.prevClose
+      if (screenerWinCriteria === 'gapup_open_prevclose') {
+        const nextOpen = result.nextDayData.open
+        if (prevClose != null && nextOpen != null && prevClose > 0) {
+          const gapPct = ((nextOpen - prevClose) / prevClose) * 100
+          actuallyUp = gapPct > 0
+          outcomeDisplayPct = gapPct
+        } else {
+          // fallback: not enough data
+          actuallyUp = null
+          outcomeDisplayPct = null
+        }
+      } else {
+        actuallyUp = result.nextDayData.change > 0
+        outcomeDisplayPct = result.nextDayData.change
+      }
+      return { ...result, actuallyUp, outcomeDisplayPct }
+    })
+  }, [allResults, screenerWinCriteria])
+
+  const passedWithCriteria = useMemo(() => allResultsWithCriteria.filter(r => r.passed), [allResultsWithCriteria])
 
   // Feature selector modal
   const FeatureSelector = ({ ruleId, side, onClose }) => {
@@ -2013,6 +2089,16 @@ export default function RuleScreener({ market = 'ID' }) {
               </p>
             </div>
 
+            <div className="flex justify-end">
+              <button
+                onClick={saveBacktestToHistory}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium"
+              >
+                <FiSave className="w-4 h-4" />
+                Simpan ke Histori
+              </button>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-3">
                 <h4 className="text-sm font-semibold text-green-400 mb-2">Top 5 Trade</h4>
@@ -2113,6 +2199,156 @@ export default function RuleScreener({ market = 'ID' }) {
         )}
       </div>
 
+      {/* Backtest History Panel */}
+      {backtestHistory.length > 0 && (
+        <div className="bg-gray-800 rounded-lg border border-gray-700">
+          <button
+            onClick={() => setShowBacktestHistory(v => !v)}
+            className="w-full flex items-center justify-between p-4 hover:bg-gray-700/50 transition-colors rounded-lg"
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-lg font-semibold text-purple-400">📚 Histori Backtest</span>
+              <span className="text-xs px-2 py-0.5 rounded bg-purple-500/20 text-purple-300">{backtestHistory.length} tersimpan</span>
+            </div>
+            {showBacktestHistory ? <FiChevronUp className="w-5 h-5 text-gray-400" /> : <FiChevronDown className="w-5 h-5 text-gray-400" />}
+          </button>
+
+          {showBacktestHistory && (
+            <div className="px-4 pb-4 space-y-3 border-t border-gray-700 pt-4">
+              {backtestHistory.map(entry => (
+                <div key={entry.id} className="bg-gray-900/60 rounded-lg border border-gray-700">
+                  <button
+                    onClick={() => setExpandedHistoryId(expandedHistoryId === entry.id ? null : entry.id)}
+                    className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 hover:bg-gray-700/40 rounded-lg text-left"
+                  >
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-white font-medium text-sm">{entry.name}</span>
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300">{entry.market || 'ID'}</span>
+                        <span className="text-xs text-gray-500">{new Date(entry.savedAt).toLocaleString('id-ID')}</span>
+                      </div>
+                      <div className="flex flex-wrap gap-3 text-xs">
+                        <span className={entry.winRate >= 50 ? 'text-green-400 font-semibold' : 'text-red-400 font-semibold'}>WR {entry.winRate.toFixed(1)}%</span>
+                        <span className={entry.expectancy >= 0 ? 'text-green-300' : 'text-red-300'}>Exp {entry.expectancy >= 0 ? '+' : ''}{entry.expectancy.toFixed(3)}%</span>
+                        <span className="text-blue-300">PF {Number.isFinite(entry.profitFactor) ? entry.profitFactor.toFixed(2) : '∞'}</span>
+                        <span className="text-orange-300">DD {entry.maxDrawdown.toFixed(1)}%</span>
+                        <span className="text-gray-400">{entry.totalTrades} trades</span>
+                        <span className="text-gray-400">{entry.samplesEvaluated?.toLocaleString()} sampel</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          const updated = backtestHistory.filter(h => h.id !== entry.id)
+                          setBacktestHistory(updated)
+                          localStorage.setItem('backtestHistory', JSON.stringify(updated))
+                        }}
+                        className="text-xs px-2 py-1 rounded bg-red-900/40 hover:bg-red-700/60 text-red-400"
+                      >
+                        Hapus
+                      </button>
+                      {expandedHistoryId === entry.id ? <FiChevronUp className="w-4 h-4 text-gray-400" /> : <FiChevronDown className="w-4 h-4 text-gray-400" />}
+                    </div>
+                  </button>
+
+                  {expandedHistoryId === entry.id && (
+                    <div className="px-3 pb-3 border-t border-gray-700/70 pt-3 space-y-3">
+                      {/* Rules */}
+                      <div>
+                        <div className="text-xs text-gray-400 mb-1.5 font-semibold">Rules ({entry.logicOperator})</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {entry.rules.map((r, i) => (
+                            <span key={i} className="text-xs px-2 py-0.5 rounded bg-gray-700 text-gray-200">
+                              {ALL_FEATURES[r.leftFeature]?.label || r.leftFeature} {r.operator} {r.compareType === 'constant' ? r.rightValue : (ALL_FEATURES[r.rightFeature]?.label || r.rightFeature)}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Config */}
+                      <div className="text-xs text-gray-400">
+                        Kriteria: <span className="text-gray-200">{entry.winCriteriaLabel}</span>
+                        &nbsp;•&nbsp; Periode: <span className="text-gray-200">{entry.startDate} ~ {entry.endDate}</span>
+                        &nbsp;•&nbsp; Saham: <span className="text-gray-200">{entry.symbolsCount}</span>
+                        &nbsp;•&nbsp; Sampel: <span className="text-gray-200">{entry.samplesEvaluated?.toLocaleString()}</span>
+                      </div>
+                      {/* Stats grid */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {[
+                          { label: 'Win Rate', value: `${entry.winRate.toFixed(2)}%`, color: entry.winRate >= 50 ? 'text-green-400' : 'text-red-400' },
+                          { label: 'Expectancy', value: `${entry.expectancy >= 0 ? '+' : ''}${entry.expectancy.toFixed(3)}%`, color: entry.expectancy >= 0 ? 'text-green-400' : 'text-red-400' },
+                          { label: 'Profit Factor', value: Number.isFinite(entry.profitFactor) ? entry.profitFactor.toFixed(2) : '∞', color: 'text-blue-400' },
+                          { label: 'Max Drawdown', value: `${entry.maxDrawdown.toFixed(2)}%`, color: 'text-orange-400' },
+                          { label: 'Total Trades', value: entry.totalTrades, color: 'text-white' },
+                          { label: 'Win/Loss/BE', value: `${entry.wins}/${entry.losses}/${entry.breakeven}`, color: 'text-gray-200' },
+                          { label: 'Avg Return/Trade', value: `${entry.avgReturnPerTrade >= 0 ? '+' : ''}${entry.avgReturnPerTrade.toFixed(3)}%`, color: entry.avgReturnPerTrade >= 0 ? 'text-green-400' : 'text-red-400' },
+                          { label: 'Avg Win / Avg Loss', value: `${entry.avgWin.toFixed(2)}% / ${entry.avgLossAbs.toFixed(2)}%`, color: 'text-gray-200' },
+                        ].map(s => (
+                          <div key={s.label} className="bg-gray-800 rounded p-2">
+                            <div className="text-xs text-gray-500">{s.label}</div>
+                            <div className={`text-sm font-semibold ${s.color}`}>{s.value}</div>
+                          </div>
+                        ))}
+                      </div>
+                      {/* Best/Worst trades */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div className="bg-green-900/20 border border-green-500/20 rounded p-2">
+                          <div className="text-xs text-green-400 font-semibold mb-1">Top 5 Trade</div>
+                          {(entry.bestTrades || []).map((t, i) => (
+                            <div key={i} className="flex justify-between text-xs text-gray-300">
+                              <span>{t.symbol} • {t.date?.split('T')[0]}</span>
+                              <span className="text-green-400">+{t.outcomePercent.toFixed(2)}%</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="bg-red-900/20 border border-red-500/20 rounded p-2">
+                          <div className="text-xs text-red-400 font-semibold mb-1">Worst 5 Trade</div>
+                          {(entry.worstTrades || []).map((t, i) => (
+                            <div key={i} className="flex justify-between text-xs text-gray-300">
+                              <span>{t.symbol} • {t.date?.split('T')[0]}</span>
+                              <span className="text-red-400">{t.outcomePercent.toFixed(2)}%</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Load rules back button */}
+                      <button
+                        onClick={() => {
+                          const rulesWithIds = entry.rules.map((r, i) => ({ ...r, id: i + 1 }))
+                          setRules(rulesWithIds)
+                          setNextRuleId(rulesWithIds.length + 1)
+                          setLogicOperator(entry.logicOperator || 'AND')
+                          setBacktestWinCriteria(entry.winCriteria)
+                          setBacktestStartDate(entry.startDate)
+                          setBacktestEndDate(entry.endDate)
+                        }}
+                        className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded bg-blue-700 hover:bg-blue-600 text-white"
+                      >
+                        <FiUpload className="w-3 h-3" />
+                        Load Rules dari Histori ini
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+              {backtestHistory.length > 0 && (
+                <button
+                  onClick={() => {
+                    if (confirm('Hapus semua histori backtest?')) {
+                      setBacktestHistory([])
+                      localStorage.removeItem('backtestHistory')
+                    }
+                  }}
+                  className="text-xs text-red-400 hover:text-red-300 mt-1"
+                >
+                  Hapus Semua Histori
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="flex justify-center">
         <button
           onClick={runScreener}
@@ -2201,11 +2437,25 @@ export default function RuleScreener({ market = 'ID' }) {
             </div>
           </div>
 
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
             <h3 className="text-lg font-semibold text-white">
               📊 Hasil Screening
             </h3>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-3">
+              {allResults.some(r => r.nextDayData) && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-400 whitespace-nowrap">Kriteria:</span>
+                  <select
+                    value={screenerWinCriteria}
+                    onChange={(e) => setScreenerWinCriteria(e.target.value)}
+                    className="text-xs px-2 py-1.5 bg-gray-700 rounded border border-gray-600 text-white"
+                  >
+                    {Object.entries(BACKTEST_WIN_CRITERIA).map(([value, cfg]) => (
+                      <option key={value} value={value}>{cfg.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
@@ -2219,7 +2469,7 @@ export default function RuleScreener({ market = 'ID' }) {
           </div>
 
           <div className="space-y-2">
-            {(showAllResults ? allResults : results).map((result) => (
+            {(showAllResults ? allResultsWithCriteria : passedWithCriteria).map((result) => (
               <div 
                 key={result.symbol} 
                 className={`rounded-lg overflow-hidden ${
@@ -2250,13 +2500,13 @@ export default function RuleScreener({ market = 'ID' }) {
                       </span>
                     )}
                     {/* Next day confirmation */}
-                    {result.nextDayData && (
+                    {result.nextDayData && result.outcomeDisplayPct != null && (
                       <span className={`px-2 py-0.5 rounded text-sm ${
-                        result.nextDayData.change > 0 
-                          ? 'bg-green-500/20 text-green-400' 
+                        result.actuallyUp
+                          ? 'bg-green-500/20 text-green-400'
                           : 'bg-red-500/20 text-red-400'
-                      }`} title={`Perubahan ke tanggal ${result.nextDayData.date}`}>
-                        📈 {result.nextDayData.change > 0 ? '+' : ''}{result.nextDayData.change?.toFixed(2)}%
+                      }`} title={screenerWinCriteria === 'gapup_open_prevclose' ? `Gap Open vs PrevClose ke tanggal ${result.nextDayData.date}` : `Return ke tanggal ${result.nextDayData.date}`}>
+                        {screenerWinCriteria === 'gapup_open_prevclose' ? '🚀' : '📈'} {result.outcomeDisplayPct >= 0 ? '+' : ''}{result.outcomeDisplayPct?.toFixed(2)}%
                       </span>
                     )}
                     {result.error && (
