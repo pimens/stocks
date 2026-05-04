@@ -3,6 +3,7 @@ import { stockApi } from '../services/api'
 import { STOCK_PRICES, PRICE_RANGES, getStocksByPriceRange } from '../data/stockPrices'
 import { US_POPULAR_STOCKS } from '../data/usStocks'
 import { FiPlus, FiTrash2, FiPlay, FiSave, FiUpload, FiDownload, FiCopy, FiCheck, FiX, FiAlertTriangle, FiInfo, FiChevronDown, FiChevronUp, FiRefreshCw, FiFilter, FiTrendingUp, FiTrendingDown } from 'react-icons/fi'
+import * as XLSX from 'xlsx'
 
 // All available features for screening
 const ALL_FEATURES = {
@@ -1109,6 +1110,55 @@ export default function RuleScreener({ market = 'ID' }) {
     }
   }
 
+  const downloadBacktestExcel = () => {
+    if (!backtestResult) return
+
+    const wb = XLSX.utils.book_new()
+
+    // Sheet 1: Summary
+    const summary = [
+      ['Backtest Summary', ''],
+      ['Periode', `${backtestResult.startDate} s/d ${backtestResult.endDate}`],
+      ['Win Criteria', BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.label || backtestResult.winCriteria],
+      ['Symbols', backtestResult.symbolsCount],
+      ['Samples Evaluated', backtestResult.samplesEvaluated],
+      [],
+      ['Metric', 'Value'],
+      ['Total Trades', backtestResult.totalTrades],
+      ['Wins', backtestResult.wins],
+      ['Losses', backtestResult.losses],
+      ['Breakeven', backtestResult.breakeven],
+      ['Win Rate (%)', +backtestResult.winRate.toFixed(2)],
+      ['Expectancy (%)', +backtestResult.expectancy.toFixed(4)],
+      ['Avg Return / Trade (%)', +backtestResult.avgReturnPerTrade.toFixed(4)],
+      ['Avg Win (%)', +backtestResult.avgWin.toFixed(4)],
+      ['Avg Loss (%)', +backtestResult.avgLossAbs.toFixed(4)],
+      ['Gross Profit (%)', +backtestResult.grossProfit.toFixed(4)],
+      ['Gross Loss (%)', +backtestResult.grossLossAbs.toFixed(4)],
+      ['Profit Factor', Number.isFinite(backtestResult.profitFactor) ? +backtestResult.profitFactor.toFixed(4) : 'Infinity'],
+      ['Max Drawdown (%)', +backtestResult.maxDrawdown.toFixed(4)],
+      ['Total Return (%)', +backtestResult.totalReturn.toFixed(4)],
+    ]
+    const wsSummary = XLSX.utils.aoa_to_sheet(summary)
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary')
+
+    // Sheet 2: All Trades
+    const tradeHeaders = ['#', 'Symbol', 'Tanggal Sinyal', 'Rule Lolos', 'Outcome (%)', 'Status']
+    const tradeRows = backtestResult.trades.map((t, i) => [
+      i + 1,
+      t.symbol,
+      t.date?.split('T')[0] || '-',
+      `${t.passedCount}/${rules.length}`,
+      +t.outcomePercent.toFixed(4),
+      t.isWin ? 'Win' : t.isLoss ? 'Loss' : 'Breakeven',
+    ])
+    const wsTrades = XLSX.utils.aoa_to_sheet([tradeHeaders, ...tradeRows])
+    XLSX.utils.book_append_sheet(wb, wsTrades, 'All Trades')
+
+    const filename = `backtest_${backtestResult.startDate}_${backtestResult.endDate}.xlsx`
+    XLSX.writeFile(wb, filename)
+  }
+
   // Run screening
   const runScreener = async () => {
     if (rules.length === 0) {
@@ -1997,14 +2047,23 @@ export default function RuleScreener({ market = 'ID' }) {
                 <h4 className="text-sm font-semibold text-white">
                   📋 Detail Trades (Sinyal -&gt; {BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.metricShort || BACKTEST_WIN_CRITERIA.return_h1_positive.metricShort})
                 </h4>
-                {backtestResult.trades.length > 100 && (
+                <div className="flex items-center gap-2">
+                  {backtestResult.trades.length > 100 && (
+                    <button
+                      onClick={() => setShowAllBacktestTrades((v) => !v)}
+                      className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-200"
+                    >
+                      {showAllBacktestTrades ? 'Tampilkan 100 pertama' : `Tampilkan semua (${backtestResult.trades.length})`}
+                    </button>
+                  )}
                   <button
-                    onClick={() => setShowAllBacktestTrades((v) => !v)}
-                    className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-200"
+                    onClick={downloadBacktestExcel}
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded bg-green-700 hover:bg-green-600 text-white font-medium"
                   >
-                    {showAllBacktestTrades ? 'Tampilkan 100 pertama' : `Tampilkan semua (${backtestResult.trades.length})`}
+                    <FiDownload className="w-3.5 h-3.5" />
+                    Download Excel
                   </button>
-                )}
+                </div>
               </div>
 
               {backtestResult.trades.length === 0 ? (
