@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react'
 import { stockApi } from '../services/api'
 import { STOCK_PRICES, PRICE_RANGES, getStocksByPriceRange } from '../data/stockPrices'
 import { US_POPULAR_STOCKS } from '../data/usStocks'
-import { FiPlus, FiTrash2, FiPlay, FiSave, FiUpload, FiDownload, FiCopy, FiCheck, FiX, FiAlertTriangle, FiInfo, FiChevronDown, FiChevronUp, FiRefreshCw, FiFilter, FiTrendingUp, FiTrendingDown } from 'react-icons/fi'
+import { FiPlus, FiTrash2, FiPlay, FiSave, FiUpload, FiDownload, FiCopy, FiCheck, FiX, FiAlertTriangle, FiInfo, FiChevronDown, FiChevronUp, FiRefreshCw, FiFilter, FiTrendingUp, FiTrendingDown, FiStar } from 'react-icons/fi'
 import * as XLSX from 'xlsx'
 
 // All available features for screening
@@ -770,7 +770,8 @@ export default function RuleScreener({ market = 'ID' }) {
   const [screenerWinCriteria, setScreenerWinCriteria] = useState('return_h1_positive')
   const [backtestHistory, setBacktestHistory] = useState([])
   const [showBacktestHistory, setShowBacktestHistory] = useState(false)
-  const [expandedHistoryId, setExpandedHistoryId] = useState(null)
+  const [expandedHistoryIds, setExpandedHistoryIds] = useState(new Set())
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
 
   // Load saved presets & history from localStorage
   useEffect(() => {
@@ -2209,22 +2210,47 @@ export default function RuleScreener({ market = 'ID' }) {
             <div className="flex items-center gap-3">
               <span className="text-lg font-semibold text-purple-400">📚 Histori Backtest</span>
               <span className="text-xs px-2 py-0.5 rounded bg-purple-500/20 text-purple-300">{backtestHistory.length} tersimpan</span>
+              {backtestHistory.some(h => h.favorite) && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowFavoritesOnly(v => !v) }}
+                  className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded transition-colors ${
+                    showFavoritesOnly ? 'bg-yellow-500/30 text-yellow-300 border border-yellow-500/50' : 'bg-gray-700 text-gray-400 hover:text-yellow-300'
+                  }`}
+                >
+                  <FiStar className="w-3 h-3" />
+                  {showFavoritesOnly ? 'Semua' : 'Favorit'}
+                </button>
+              )}
             </div>
             {showBacktestHistory ? <FiChevronUp className="w-5 h-5 text-gray-400" /> : <FiChevronDown className="w-5 h-5 text-gray-400" />}
           </button>
 
           {showBacktestHistory && (
             <div className="px-4 pb-4 space-y-3 border-t border-gray-700 pt-4">
-              {backtestHistory.map(entry => (
+              {backtestHistory.filter(entry => !showFavoritesOnly || entry.favorite).map(entry => (
                 <div key={entry.id} className="bg-gray-900/60 rounded-lg border border-gray-700">
                   <button
-                    onClick={() => setExpandedHistoryId(expandedHistoryId === entry.id ? null : entry.id)}
+                    onClick={() => setExpandedHistoryIds(prev => { const next = new Set(prev); next.has(entry.id) ? next.delete(entry.id) : next.add(entry.id); return next; })}
                     className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 hover:bg-gray-700/40 rounded-lg text-left"
                   >
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-2 flex-wrap">
+                        {entry.favorite && (
+                          <FiStar className={`w-3.5 h-3.5 shrink-0 ${
+                            entry.winCriteria === 'gapup_open_prevclose'
+                              ? 'text-cyan-400 fill-cyan-400'
+                              : 'text-yellow-400 fill-yellow-400'
+                          }`} />
+                        )}
                         <span className="text-white font-medium text-sm">{entry.name}</span>
                         <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300">{entry.market || 'ID'}</span>
+                        <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                          entry.winCriteria === 'gapup_open_prevclose'
+                            ? 'bg-cyan-500/20 text-cyan-300'
+                            : 'bg-yellow-500/20 text-yellow-300'
+                        }`}>
+                          {entry.winCriteria === 'gapup_open_prevclose' ? 'Gap Open' : 'Return H+1'}
+                        </span>
                         <span className="text-xs text-gray-500">{new Date(entry.savedAt).toLocaleString('id-ID')}</span>
                       </div>
                       <div className="flex flex-wrap gap-3 text-xs">
@@ -2235,8 +2261,40 @@ export default function RuleScreener({ market = 'ID' }) {
                         <span className="text-gray-400">{entry.totalTrades} trades</span>
                         <span className="text-gray-400">{entry.samplesEvaluated?.toLocaleString()} sampel</span>
                       </div>
+                      <div className="flex flex-wrap gap-1 mt-0.5">
+                        {(entry.rules || []).map((r, i) => (
+                          <span key={i} className="text-xs px-1.5 py-0.5 rounded bg-gray-700/80 text-gray-300">
+                            {ALL_FEATURES[r.leftFeature]?.label || r.leftFeature} {r.operator} {r.compareType === 'constant' ? r.rightValue : (ALL_FEATURES[r.rightFeature]?.label || r.rightFeature)}
+                          </span>
+                        ))}
+                        {entry.rules?.length > 1 && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-gray-700/50 text-gray-500">{entry.logicOperator}</span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          const updated = backtestHistory.map(h => h.id === entry.id ? { ...h, favorite: !h.favorite } : h)
+                          setBacktestHistory(updated)
+                          localStorage.setItem('backtestHistory', JSON.stringify(updated))
+                        }}
+                        className={`p-1.5 rounded transition-colors ${
+                          entry.favorite
+                            ? entry.winCriteria === 'gapup_open_prevclose'
+                              ? 'text-cyan-400 bg-cyan-500/20 hover:bg-cyan-500/30'
+                              : 'text-yellow-400 bg-yellow-500/20 hover:bg-yellow-500/30'
+                            : 'text-gray-600 hover:text-yellow-400 hover:bg-yellow-500/10'
+                        }`}
+                        title={entry.favorite ? 'Hapus dari favorit' : 'Tandai favorit'}
+                      >
+                        <FiStar className={`w-4 h-4 ${
+                          entry.favorite
+                            ? entry.winCriteria === 'gapup_open_prevclose' ? 'fill-cyan-400' : 'fill-yellow-400'
+                            : ''
+                        }`} />
+                      </button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
@@ -2248,11 +2306,11 @@ export default function RuleScreener({ market = 'ID' }) {
                       >
                         Hapus
                       </button>
-                      {expandedHistoryId === entry.id ? <FiChevronUp className="w-4 h-4 text-gray-400" /> : <FiChevronDown className="w-4 h-4 text-gray-400" />}
+                      {expandedHistoryIds.has(entry.id) ? <FiChevronUp className="w-4 h-4 text-gray-400" /> : <FiChevronDown className="w-4 h-4 text-gray-400" />}
                     </div>
                   </button>
 
-                  {expandedHistoryId === entry.id && (
+                  {expandedHistoryIds.has(entry.id) && (
                     <div className="px-3 pb-3 border-t border-gray-700/70 pt-3 space-y-3">
                       {/* Rules */}
                       <div>
