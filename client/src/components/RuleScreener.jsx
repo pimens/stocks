@@ -722,7 +722,7 @@ export default function RuleScreener({ market = 'ID' }) {
   const [stockList, setStockList] = useState('lq45') // 'lq45', 'idx30', 'sector', 'price', 'all', 'custom'
   const [customStocks, setCustomStocks] = useState('')
   const [selectedSectors, setSelectedSectors] = useState([]) // For sector filter
-  const [selectedPriceRange, setSelectedPriceRange] = useState('all') // For price range filter
+  const [selectedPriceRanges, setSelectedPriceRanges] = useState([]) // For price range filter (multi)
   
   // Target date for screening
   const [targetDate, setTargetDate] = useState(new Date().toISOString().split('T')[0])
@@ -811,14 +811,18 @@ export default function RuleScreener({ market = 'ID' }) {
         // Filter by selected sectors
         if (selectedSectors.length === 0) return IDX_STOCKS.map(s => s.code)
         return IDX_STOCKS.filter(s => selectedSectors.includes(s.sector)).map(s => s.code)
-      case 'price':
-        // Filter by price range
-        if (selectedPriceRange === 'all') {
+      case 'price': {
+        // Filter by price range (multi)
+        if (selectedPriceRanges.length === 0) {
           return Object.keys(STOCK_PRICES).filter(code => STOCK_PRICES[code] > 0)
         }
         const grouped = getStocksByPriceRange()
-        const rangeData = grouped[selectedPriceRange]
-        return rangeData?.stocks?.map(s => s.code) || []
+        const codesSet = new Set()
+        selectedPriceRanges.forEach(r => {
+          grouped[r]?.stocks?.forEach(s => codesSet.add(s.code))
+        })
+        return Array.from(codesSet)
+      }
       case 'all':
         // All stocks from IDX_STOCKS
         return IDX_STOCKS.map(s => s.code)
@@ -827,7 +831,7 @@ export default function RuleScreener({ market = 'ID' }) {
       default:
         return LQ45_STOCKS
     }
-  }, [stockList, customStocks, selectedSectors, selectedPriceRange, isUS])
+  }, [stockList, customStocks, selectedSectors, selectedPriceRanges, isUS])
 
   // Add new rule
   const addRule = () => {
@@ -1652,26 +1656,49 @@ export default function RuleScreener({ market = 'ID' }) {
           {/* Price range selection */}
           {stockList === 'price' && (
             <div className="mt-3 p-3 bg-gray-700/50 rounded-lg">
-              <span className="text-sm text-gray-400 block mb-2">Pilih Range Harga:</span>
-              <select
-                value={selectedPriceRange}
-                onChange={(e) => setSelectedPriceRange(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 text-white"
-              >
-                <option value="all">📊 Semua Harga</option>
-                <option value="micro">🔹 Saham Gorengan (&lt; Rp 50)</option>
-                <option value="penny">💰 Rp 50 - 100</option>
-                <option value="cheap">💵 Rp 100 - 200</option>
-                <option value="low">📊 Rp 200 - 500</option>
-                <option value="medium">📈 Rp 500 - 1.000</option>
-                <option value="mid">💹 Rp 1.000 - 2.000</option>
-                <option value="high">🏦 Rp 2.000 - 5.000</option>
-                <option value="premium">💎 Rp 5.000 - 10.000</option>
-                <option value="elite">👑 Rp 10.000 - 50.000</option>
-                <option value="ultra">🚀 &gt; Rp 50.000</option>
-              </select>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-gray-400">Pilih Range Harga:</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSelectedPriceRanges(['micro','penny','cheap','low','medium','mid','high','premium','elite','ultra'])}
+                    className="text-xs text-blue-400 hover:text-blue-300"
+                  >Pilih Semua</button>
+                  <button
+                    onClick={() => setSelectedPriceRanges([])}
+                    className="text-xs text-gray-400 hover:text-gray-300"
+                  >Reset</button>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { key: 'micro',   label: '🔹 < 50' },
+                  { key: 'penny',   label: '💰 50–100' },
+                  { key: 'cheap',   label: '💵 100–200' },
+                  { key: 'low',     label: '📊 200–500' },
+                  { key: 'medium',  label: '📈 500–1K' },
+                  { key: 'mid',     label: '💹 1K–2K' },
+                  { key: 'high',    label: '🏦 2K–5K' },
+                  { key: 'premium', label: '💎 5K–10K' },
+                  { key: 'elite',   label: '👑 10K–50K' },
+                  { key: 'ultra',   label: '🚀 >50K' },
+                ].map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => setSelectedPriceRanges(prev =>
+                      prev.includes(key) ? prev.filter(r => r !== key) : [...prev, key]
+                    )}
+                    className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                      selectedPriceRanges.includes(key)
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-600 text-gray-300 hover:bg-gray-500'
+                    }`}
+                  >{label}</button>
+                ))}
+              </div>
               <div className="mt-2 text-xs text-gray-500">
-                {getSelectedStocks().length} saham dalam range harga ini
+                {selectedPriceRanges.length === 0
+                  ? `Tidak ada range dipilih (semua ${Object.keys(STOCK_PRICES).filter(c => STOCK_PRICES[c] > 0).length} saham)`
+                  : `${getSelectedStocks().length} saham dari ${selectedPriceRanges.length} range dipilih`}
               </div>
             </div>
           )}
