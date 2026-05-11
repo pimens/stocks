@@ -1040,8 +1040,8 @@ export default function RuleScreener({ market = 'ID' }) {
           : ruleResults.some((r) => r.passed)
 
         return {
-          symbol: row.symbol,
-          date: row.date,
+          ...row,
+          signalDate: row.date,
           returnPercent: Number(row.priceChangePercent) || 0,
           currentOpen: Number(row.currentOpen) || 0,
           prevClose: Number(row.prevClose) || 0,
@@ -1065,6 +1065,9 @@ export default function RuleScreener({ market = 'ID' }) {
         const outcomePercent = backtestWinCriteria === 'gapup_open_prevclose'
           ? trade.gapOpenPercent
           : trade.returnPercent
+        const outcomeDate = backtestWinCriteria === 'gapup_open_prevclose'
+          ? trade.signalDate
+          : (trade.futureDate || trade.signalDate)
 
         let isWin = false
         let isLoss = false
@@ -1082,7 +1085,13 @@ export default function RuleScreener({ market = 'ID' }) {
 
         return {
           ...trade,
+          outcomeDate,
           outcomePercent,
+          outcomePercentByWinCriteria: outcomePercent,
+          status: isWin ? 'Win' : isLoss ? 'Loss' : 'Breakeven',
+          winCriteriaUsed: backtestWinCriteria,
+          winCriteriaLabelUsed: getWinCriteriaDisplay(backtestWinCriteria, horizonDays).label,
+          returnHorizonDays: horizonDays,
           isWin,
           isLoss,
           isBreakeven,
@@ -1187,20 +1196,155 @@ export default function RuleScreener({ market = 'ID' }) {
     XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary')
 
     // Sheet 2: All Trades
-    const tradeHeaders = ['#', 'Symbol', 'Tanggal Sinyal', 'Rule Lolos', 'Outcome (%)', 'Status']
+    const tradeHeaders = ['#', 'Symbol', 'Tanggal Sinyal', 'Tanggal Outcome', 'Rule Lolos', 'Outcome (%)', 'Status', 'Kriteria Win']
     const tradeRows = backtestResult.trades.map((t, i) => [
       i + 1,
       t.symbol,
-      t.date?.split('T')[0] || '-',
+      t.signalDate?.split('T')[0] || t.date?.split('T')[0] || '-',
+      t.outcomeDate?.split('T')[0] || '-',
       `${t.passedCount}/${rules.length}`,
       +t.outcomePercent.toFixed(4),
-      t.isWin ? 'Win' : t.isLoss ? 'Loss' : 'Breakeven',
+      t.status,
+      backtestResult.winCriteriaLabel || backtestResult.winCriteria,
     ])
     const wsTrades = XLSX.utils.aoa_to_sheet([tradeHeaders, ...tradeRows])
     XLSX.utils.book_append_sheet(wb, wsTrades, 'All Trades')
 
+    // Sheet 3: Full indicator dataset for executed trades
+    const allTradeKeys = new Set()
+    backtestResult.trades.forEach((trade) => {
+      Object.keys(trade).forEach((key) => allTradeKeys.add(key))
+    })
+
+    const preferredMetaKeys = [
+      'symbol',
+      'signalDate',
+      'date',
+      'outcomeDate',
+      'outcomePercentByWinCriteria',
+      'outcomePercent',
+      'status',
+      'isWin',
+      'isLoss',
+      'isBreakeven',
+      'winCriteriaUsed',
+      'winCriteriaLabelUsed',
+      'returnHorizonDays',
+      'passed',
+      'passedCount',
+      'futureDate',
+      'futureClose',
+      'priceChangePercent',
+      'gapOpenPercent',
+      'returnPercent',
+    ]
+
+    const orderedMetaKeys = preferredMetaKeys.filter((key) => allTradeKeys.has(key))
+    const remainingKeys = [...allTradeKeys]
+      .filter((key) => !orderedMetaKeys.includes(key))
+      .sort((a, b) => a.localeCompare(b))
+    const indicatorHeaders = [...orderedMetaKeys, ...remainingKeys]
+
+    const normalizeCell = (value) => {
+      if (value === null || value === undefined) return ''
+      if (typeof value === 'number') return Number.isFinite(value) ? value : ''
+      if (typeof value === 'boolean') return value ? 1 : 0
+      if (typeof value === 'object') return JSON.stringify(value)
+      return value
+    }
+
+    const indicatorRows = backtestResult.trades.map((trade) => (
+      indicatorHeaders.map((key) => normalizeCell(trade[key]))
+    ))
+
+    const wsIndicators = indicatorHeaders.length > 0
+      ? XLSX.utils.aoa_to_sheet([
+        indicatorHeaders,
+        ...indicatorRows,
+      ])
+      : XLSX.utils.aoa_to_sheet([
+        ['Info'],
+        ['Tidak ada trade yang lolos rule pada periode ini.'],
+      ])
+    XLSX.utils.book_append_sheet(wb, wsIndicators, 'Trade Indicators')
+
     const filename = `backtest_${backtestResult.startDate}_${backtestResult.endDate}.xlsx`
     XLSX.writeFile(wb, filename)
+  }
+
+  const downloadTradeIndicatorsCSV = () => {
+    if (!backtestResult) return
+
+    const allTradeKeys = new Set()
+    backtestResult.trades.forEach((trade) => {
+      Object.keys(trade).forEach((key) => allTradeKeys.add(key))
+    })
+
+    const preferredMetaKeys = [
+      'symbol',
+      'signalDate',
+      'date',
+      'outcomeDate',
+      'outcomePercentByWinCriteria',
+      'outcomePercent',
+      'status',
+      'isWin',
+      'isLoss',
+      'isBreakeven',
+      'winCriteriaUsed',
+      'winCriteriaLabelUsed',
+      'returnHorizonDays',
+      'passed',
+      'passedCount',
+      'futureDate',
+      'futureClose',
+      'priceChangePercent',
+      'gapOpenPercent',
+      'returnPercent',
+    ]
+
+    const orderedMetaKeys = preferredMetaKeys.filter((key) => allTradeKeys.has(key))
+    const remainingKeys = [...allTradeKeys]
+      .filter((key) => !orderedMetaKeys.includes(key))
+      .sort((a, b) => a.localeCompare(b))
+    const indicatorHeaders = [...orderedMetaKeys, ...remainingKeys]
+
+    if (indicatorHeaders.length === 0) {
+      const fallback = 'Info\n"Tidak ada trade yang lolos rule pada periode ini."\n'
+      const fallbackBlob = new Blob([`\uFEFF${fallback}`], { type: 'text/csv;charset=utf-8;' })
+      const fallbackUrl = URL.createObjectURL(fallbackBlob)
+      const fallbackLink = document.createElement('a')
+      fallbackLink.href = fallbackUrl
+      fallbackLink.download = `trade_indicators_${backtestResult.startDate}_${backtestResult.endDate}.csv`
+      fallbackLink.click()
+      URL.revokeObjectURL(fallbackUrl)
+      return
+    }
+
+    const normalizeCell = (value) => {
+      if (value === null || value === undefined) return ''
+      if (typeof value === 'number') return Number.isFinite(value) ? value : ''
+      if (typeof value === 'boolean') return value ? 1 : 0
+      if (typeof value === 'object') return JSON.stringify(value)
+      return value
+    }
+
+    const indicatorRows = backtestResult.trades.map((trade) => (
+      indicatorHeaders.map((key) => normalizeCell(trade[key]))
+    ))
+
+    const wsIndicators = XLSX.utils.aoa_to_sheet([
+      indicatorHeaders,
+      ...indicatorRows,
+    ])
+    const csv = XLSX.utils.sheet_to_csv(wsIndicators)
+    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `trade_indicators_${backtestResult.startDate}_${backtestResult.endDate}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
   }
 
   const saveBacktestToHistory = () => {
@@ -2165,7 +2309,7 @@ export default function RuleScreener({ market = 'ID' }) {
                   {backtestResult.bestTrades.length === 0 && <div className="text-xs text-gray-400">Belum ada trade lolos rule</div>}
                   {backtestResult.bestTrades.map((t, i) => (
                     <div key={`${t.symbol}-${t.date}-${i}`} className="flex justify-between text-sm">
-                      <span className="text-gray-200">{t.symbol} • {t.date?.split('T')[0]}</span>
+                      <span className="text-gray-200">{t.symbol} • {(t.signalDate || t.date)?.split('T')[0]}</span>
                       <span className="text-green-400 font-medium">
                         {t.outcomePercent >= 0 ? '+' : ''}{t.outcomePercent.toFixed(2)}%
                       </span>
@@ -2179,7 +2323,7 @@ export default function RuleScreener({ market = 'ID' }) {
                   {backtestResult.worstTrades.length === 0 && <div className="text-xs text-gray-400">Belum ada trade lolos rule</div>}
                   {backtestResult.worstTrades.map((t, i) => (
                     <div key={`${t.symbol}-${t.date}-${i}`} className="flex justify-between text-sm">
-                      <span className="text-gray-200">{t.symbol} • {t.date?.split('T')[0]}</span>
+                      <span className="text-gray-200">{t.symbol} • {(t.signalDate || t.date)?.split('T')[0]}</span>
                       <span className="text-red-400 font-medium">{t.outcomePercent.toFixed(2)}%</span>
                     </div>
                   ))}
@@ -2208,6 +2352,14 @@ export default function RuleScreener({ market = 'ID' }) {
                     <FiDownload className="w-3.5 h-3.5" />
                     Download Excel
                   </button>
+                  <button
+                    onClick={downloadTradeIndicatorsCSV}
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded bg-emerald-700 hover:bg-emerald-600 text-white font-medium"
+                    title="Download khusus dataset Trade Indicators dalam format CSV"
+                  >
+                    <FiDownload className="w-3.5 h-3.5" />
+                    Download CSV (Indicators)
+                  </button>
                 </div>
               </div>
 
@@ -2231,7 +2383,7 @@ export default function RuleScreener({ market = 'ID' }) {
                         <tr key={`${t.symbol}-${t.date}-${i}`} className="border-b border-gray-800/70">
                           <td className="py-2 pr-3 text-gray-500">{i + 1}</td>
                           <td className="py-2 pr-3 text-white font-medium">{t.symbol}</td>
-                          <td className="py-2 pr-3 text-gray-300">{t.date?.split('T')[0] || '-'}</td>
+                          <td className="py-2 pr-3 text-gray-300">{(t.signalDate || t.date)?.split('T')[0] || '-'}</td>
                           <td className="py-2 pr-3 text-gray-300">{t.passedCount}/{rules.length}</td>
                           <td className={`py-2 pr-3 font-medium ${t.outcomePercent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                             {t.outcomePercent >= 0 ? '+' : ''}{t.outcomePercent.toFixed(2)}%
@@ -2412,7 +2564,7 @@ export default function RuleScreener({ market = 'ID' }) {
                           <div className="text-xs text-green-400 font-semibold mb-1">Top 5 Trade</div>
                           {(entry.bestTrades || []).map((t, i) => (
                             <div key={i} className="flex justify-between text-xs text-gray-300">
-                              <span>{t.symbol} • {t.date?.split('T')[0]}</span>
+                              <span>{t.symbol} • {(t.signalDate || t.date)?.split('T')[0]}</span>
                               <span className="text-green-400">+{t.outcomePercent.toFixed(2)}%</span>
                             </div>
                           ))}
@@ -2421,7 +2573,7 @@ export default function RuleScreener({ market = 'ID' }) {
                           <div className="text-xs text-red-400 font-semibold mb-1">Worst 5 Trade</div>
                           {(entry.worstTrades || []).map((t, i) => (
                             <div key={i} className="flex justify-between text-xs text-gray-300">
-                              <span>{t.symbol} • {t.date?.split('T')[0]}</span>
+                              <span>{t.symbol} • {(t.signalDate || t.date)?.split('T')[0]}</span>
                               <span className="text-red-400">{t.outcomePercent.toFixed(2)}%</span>
                             </div>
                           ))}
