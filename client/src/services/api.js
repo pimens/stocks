@@ -50,14 +50,20 @@ export const stockApi = {
 
   // Get regression data with indicators for multiple stocks
   getRegressionData: async (symbols, startDate, endDate, options = {}) => {
-    const { upThreshold = 1.0, downThreshold = -0.5, includeNeutral = false } = options
+    const {
+      upThreshold = 1.0,
+      downThreshold = -0.5,
+      includeNeutral = false,
+      horizonDays = 1,
+    } = options
     const response = await axios.post(`${API_BASE}/stocks/regression-data`, {
       symbols,
       startDate,
       endDate,
       upThreshold,
       downThreshold,
-      includeNeutral
+      includeNeutral,
+      horizonDays
     })
     return response.data
   },
@@ -73,13 +79,14 @@ export const stockApi = {
 
   // Get live indicator data (supports realtime calculation for today)
   // timeframe: 1 = daily, 3 = 3-day candles, 5 = weekly equivalent, etc.
-  getLiveIndicators: async (symbol, targetDate, useRealtime = true, timeframe = 1, market = 'ID') => {
+  getLiveIndicators: async (symbol, targetDate, useRealtime = true, timeframe = 1, market = 'ID', horizonDays = 1) => {
     const response = await axios.post(`${API_BASE}/stocks/live-indicators`, {
       symbol,
       targetDate,
       useRealtime,
       timeframe,
-      market
+      market,
+      horizonDays
     })
     return response.data
   },

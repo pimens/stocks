@@ -278,13 +278,31 @@ const BACKTEST_WIN_CRITERIA = {
   return_h1_positive: {
     label: 'Win jika Return H+1 > 0%',
     metricShort: 'Return H+1',
-    metricLong: 'Return H+1 (close vs prev close)',
+    metricLong: 'Return H+1 (close vs signal close)',
   },
   gapup_open_prevclose: {
     label: 'Win jika Current Open > Prev Close (Gap Up Open)',
     metricShort: 'Gap Open',
     metricLong: 'Gap Open % (current open vs prev close)',
   },
+}
+
+const normalizeHorizonDays = (value) => {
+  const parsed = Number.parseInt(value, 10)
+  return Number.isNaN(parsed) || parsed < 1 ? 1 : parsed
+}
+
+const getWinCriteriaDisplay = (criteria, horizonDays = 1) => {
+  const base = BACKTEST_WIN_CRITERIA[criteria] || {}
+  if (criteria !== 'return_h1_positive') return base
+
+  const horizonLabel = `H+${normalizeHorizonDays(horizonDays)}`
+  return {
+    ...base,
+    label: `Win jika Return ${horizonLabel} > 0%`,
+    metricShort: `Return ${horizonLabel}`,
+    metricLong: `Return ${horizonLabel} (close vs signal close)`,
+  }
 }
 
 // Preset screening rules
@@ -766,6 +784,7 @@ export default function RuleScreener({ market = 'ID' }) {
   const [backtestError, setBacktestError] = useState(null)
   const [backtestResult, setBacktestResult] = useState(null)
   const [showAllBacktestTrades, setShowAllBacktestTrades] = useState(false)
+  const [returnHorizonDays, setReturnHorizonDays] = useState(1)
   const [backtestWinCriteria, setBacktestWinCriteria] = useState('return_h1_positive')
   const [screenerWinCriteria, setScreenerWinCriteria] = useState('return_h1_positive')
   const [backtestHistory, setBacktestHistory] = useState([])
@@ -970,6 +989,7 @@ export default function RuleScreener({ market = 'ID' }) {
 
   const runBacktest = async () => {
     const stocks = getSelectedStocks()
+    const horizonDays = normalizeHorizonDays(returnHorizonDays)
 
     if (rules.length === 0) {
       setBacktestError('Tambahkan minimal satu rule sebelum backtest')
@@ -999,6 +1019,7 @@ export default function RuleScreener({ market = 'ID' }) {
     try {
       const response = await stockApi.getRegressionData(stocks, backtestStartDate, backtestEndDate, {
         includeNeutral: true,
+        horizonDays,
       })
 
       const rows = response?.data || []
@@ -1095,11 +1116,16 @@ export default function RuleScreener({ market = 'ID' }) {
       })
 
       const sortedByOutcome = [...tradesWithOutcome].sort((a, b) => b.outcomePercent - a.outcomePercent)
+      const winCriteriaDisplay = getWinCriteriaDisplay(backtestWinCriteria, horizonDays)
 
       setBacktestResult({
         startDate: backtestStartDate,
         endDate: backtestEndDate,
         winCriteria: backtestWinCriteria,
+        returnHorizonDays: horizonDays,
+        winCriteriaLabel: winCriteriaDisplay.label,
+        winCriteriaMetricShort: winCriteriaDisplay.metricShort,
+        winCriteriaMetricLong: winCriteriaDisplay.metricLong,
         symbolsCount: stocks.length,
         samplesEvaluated: rows.length,
         totalTrades,
@@ -1136,7 +1162,8 @@ export default function RuleScreener({ market = 'ID' }) {
     const summary = [
       ['Backtest Summary', ''],
       ['Periode', `${backtestResult.startDate} s/d ${backtestResult.endDate}`],
-      ['Win Criteria', BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.label || backtestResult.winCriteria],
+      ['Win Criteria', backtestResult.winCriteriaLabel || BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.label || backtestResult.winCriteria],
+      ['Horizon', `H+${backtestResult.returnHorizonDays || 1}`],
       ['Symbols', backtestResult.symbolsCount],
       ['Samples Evaluated', backtestResult.samplesEvaluated],
       [],
@@ -1186,7 +1213,10 @@ export default function RuleScreener({ market = 'ID' }) {
       logicOperator,
       rules: rules.map(({ id, ...rest }) => rest),
       winCriteria: backtestResult.winCriteria,
-      winCriteriaLabel: BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.label || backtestResult.winCriteria,
+      returnHorizonDays: backtestResult.returnHorizonDays,
+      winCriteriaLabel: backtestResult.winCriteriaLabel || BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.label || backtestResult.winCriteria,
+      winCriteriaMetricShort: backtestResult.winCriteriaMetricShort || BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.metricShort || backtestResult.winCriteria,
+      winCriteriaMetricLong: backtestResult.winCriteriaMetricLong || BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.metricLong || backtestResult.winCriteria,
       startDate: backtestResult.startDate,
       endDate: backtestResult.endDate,
       symbolsCount: backtestResult.symbolsCount,
@@ -1244,35 +1274,17 @@ export default function RuleScreener({ market = 'ID' }) {
       const isToday = targetDate === today
       const isPastDate = targetDate < today
       
-      // Calculate next trading date (skip weekends)
-      const getNextTradingDay = (dateStr) => {
-        const date = new Date(dateStr)
-        date.setDate(date.getDate() + 1)
-        // Skip Saturday (6) and Sunday (0)
-        while (date.getDay() === 0 || date.getDay() === 6) {
-          date.setDate(date.getDate() + 1)
-        }
-        return date.toISOString().split('T')[0]
-      }
-      
-      // PENTING: Untuk mendapatkan indikator tanggal X, kita harus request tanggal X+1
-      // karena API mengembalikan indikator H-1 untuk prediksi H
-      // Jadi jika user pilih 2 Feb, kita request 3 Feb agar dapat indikator 2 Feb
-      const nextDayForAPI = getNextTradingDay(targetDate)
-      const confirmationDay = getNextTradingDay(nextDayForAPI) // H+2 untuk konfirmasi
-      
+      const horizonDays = normalizeHorizonDays(returnHorizonDays)
+
       console.log(`[RuleScreener] User selected: ${targetDate}`)
-      console.log(`[RuleScreener] API call with: ${nextDayForAPI} (to get indicators from ${targetDate})`)
-      console.log(`[RuleScreener] Confirmation day: ${confirmationDay}`)
+      console.log(`[RuleScreener] Horizon: H+${horizonDays}`)
       
       for (let i = 0; i < stocks.length; i++) {
         const symbol = stocks[i]
         setScannedCount(i + 1)
         
         try {
-          // Fetch indicator data
-          // Request nextDayForAPI to get indicators from targetDate (H-1 logic)
-          const response = await stockApi.getLiveIndicators(symbol, nextDayForAPI, false, 1, market)
+          const response = await stockApi.getLiveIndicators(symbol, targetDate, false, 1, market, horizonDays)
           
           console.log(`[RuleScreener] ${symbol} response:`, response)
           
@@ -1280,16 +1292,14 @@ export default function RuleScreener({ market = 'ID' }) {
           if (response?.data) {
             const latestData = response.data
             
-            // indicatorDate = tanggal indikator dihitung (should be targetDate)
-            // actualData = harga hari nextDayForAPI (bukan untuk validasi, ini H)
-            // prevClose, prevOpen, dll = harga targetDate (basis)
-            
-            // Harga tanggal yang user pilih (targetDate) ada di prevClose, prevOpen, dll
+            // indicatorDate = tanggal indikator dihitung (targetDate)
+            // actualData = harga tanggal screening (H)
+            // futureData = harga H+n untuk validasi swing trade
             const screeningDayOHLCV = {
-              open: latestData.prevOpen,
-              high: latestData.prevHigh,
-              low: latestData.prevLow,
-              close: latestData.prevClose,
+              open: latestData.actualData?.open ?? latestData.prevOpen,
+              high: latestData.actualData?.high ?? latestData.prevHigh,
+              low: latestData.actualData?.low ?? latestData.prevLow,
+              close: latestData.actualData?.close ?? latestData.prevClose,
             }
             
             // Evaluate all rules using indicator data
@@ -1307,18 +1317,17 @@ export default function RuleScreener({ market = 'ID' }) {
               ? ruleResults.every(r => r.passed)
               : ruleResults.some(r => r.passed)
 
-            // Next day data for confirmation already in actualData!
-            // actualData = harga nextDayForAPI (which is targetDate + 1)
+            // Confirmation data for H+n
             let nextDayData = null
-            if (isPastDate && latestData.actualData) {
+            if (isPastDate && latestData.futureData) {
               const baseClose = screeningDayOHLCV.close
               nextDayData = {
-                date: latestData.actualData.date || nextDayForAPI,
-                close: latestData.actualData.close,
-                open: latestData.actualData.open,
-                high: latestData.actualData.high,
-                low: latestData.actualData.low,
-                change: baseClose ? ((latestData.actualData.close - baseClose) / baseClose * 100) : null
+                date: latestData.futureData.date || targetDate,
+                close: latestData.futureData.close,
+                open: latestData.futureData.open,
+                high: latestData.futureData.high,
+                low: latestData.futureData.low,
+                change: baseClose ? ((latestData.futureData.close - baseClose) / baseClose * 100) : null
               }
             }
 
@@ -1335,9 +1344,10 @@ export default function RuleScreener({ market = 'ID' }) {
               screeningDate: targetDate,
               // Tanggal indikator sebenarnya dari API (should match targetDate)
               indicatorDate: response.info?.indicatorDate || targetDate,
-              // Tanggal harga konfirmasi (H+1)
+              // Tanggal harga konfirmasi (H+n)
               nextDayData,
-              actuallyUp: nextDayData ? nextDayData.change > 0 : null
+              actuallyUp: nextDayData ? nextDayData.change > 0 : null,
+              horizonDays,
             })
           } else {
             // No data returned
@@ -2037,6 +2047,25 @@ export default function RuleScreener({ market = 'ID' }) {
           </div>
         </div>
 
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Horizon Return (hari)</label>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={returnHorizonDays}
+              onChange={(e) => setReturnHorizonDays(normalizeHorizonDays(e.target.value))}
+              className="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 text-white"
+            />
+          </div>
+          <div className="flex items-end">
+            <p className="text-xs text-gray-400">
+              Return dihitung dari close tanggal sinyal ke close H+N. Preview screening dan backtest memakai horizon yang sama.
+            </p>
+          </div>
+        </div>
+
         <div className="mt-3">
           <label className="block text-sm text-gray-400 mb-1">Definisi Win</label>
           <select
@@ -2045,11 +2074,13 @@ export default function RuleScreener({ market = 'ID' }) {
             className="w-full md:w-auto px-3 py-2 bg-gray-700 rounded border border-gray-600 text-white"
           >
             {Object.entries(BACKTEST_WIN_CRITERIA).map(([value, cfg]) => (
-              <option key={value} value={value}>{cfg.label}</option>
+              <option key={value} value={value}>
+                {value === 'return_h1_positive' ? getWinCriteriaDisplay(value, returnHorizonDays).label : cfg.label}
+              </option>
             ))}
           </select>
           <p className="text-xs text-gray-400 mt-1">
-            Pilih kriteria menang untuk kebutuhan strategi (close positif atau gap-up saat open).
+            Pilih kriteria menang untuk kebutuhan strategi (return H+n positif atau gap-up saat open).
           </p>
         </div>
 
@@ -2110,7 +2141,7 @@ export default function RuleScreener({ market = 'ID' }) {
             <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3 text-sm">
               <p className="text-blue-300">
                 <strong>Arti Trades {backtestResult.totalTrades}:</strong> ada {backtestResult.totalTrades} kejadian saat rule Anda <strong>lolos</strong> pada tanggal sinyal.
-                Setiap kejadian lalu dicek metrik <strong>{BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.metricLong || BACKTEST_WIN_CRITERIA.return_h1_positive.metricLong}</strong> untuk menentukan win/loss.
+                Setiap kejadian lalu dicek metrik <strong>{backtestResult.winCriteriaMetricLong || BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.metricLong || BACKTEST_WIN_CRITERIA.return_h1_positive.metricLong}</strong> untuk menentukan win/loss.
               </p>
               <p className="text-xs text-gray-300 mt-1">
                 Jadi ini bukan jumlah saham unik, tetapi jumlah event sinyal yang lolos sepanjang periode backtest.
@@ -2159,7 +2190,7 @@ export default function RuleScreener({ market = 'ID' }) {
             <div className="bg-gray-900/40 border border-gray-700 rounded-lg p-3">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
                 <h4 className="text-sm font-semibold text-white">
-                  📋 Detail Trades (Sinyal -&gt; {BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.metricShort || BACKTEST_WIN_CRITERIA.return_h1_positive.metricShort})
+                  📋 Detail Trades (Sinyal -&gt; {backtestResult.winCriteriaMetricShort || BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.metricShort || BACKTEST_WIN_CRITERIA.return_h1_positive.metricShort})
                 </h4>
                 <div className="flex items-center gap-2">
                   {backtestResult.trades.length > 100 && (
@@ -2191,7 +2222,7 @@ export default function RuleScreener({ market = 'ID' }) {
                         <th className="py-2 pr-3">Symbol</th>
                         <th className="py-2 pr-3">Tanggal Sinyal</th>
                         <th className="py-2 pr-3">Rule Lolos</th>
-                        <th className="py-2 pr-3">{BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.metricShort || BACKTEST_WIN_CRITERIA.return_h1_positive.metricShort}</th>
+                        <th className="py-2 pr-3">{backtestResult.winCriteriaMetricShort || BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.metricShort || BACKTEST_WIN_CRITERIA.return_h1_positive.metricShort}</th>
                         <th className="py-2">Status</th>
                       </tr>
                     </thead>
@@ -2276,7 +2307,7 @@ export default function RuleScreener({ market = 'ID' }) {
                             ? 'bg-cyan-500/20 text-cyan-300'
                             : 'bg-yellow-500/20 text-yellow-300'
                         }`}>
-                          {entry.winCriteria === 'gapup_open_prevclose' ? 'Gap Open' : 'Return H+1'}
+                          {entry.winCriteriaLabel || (entry.winCriteria === 'gapup_open_prevclose' ? 'Gap Open' : `Return H+${entry.returnHorizonDays || 1}`)}
                         </span>
                         <span className="text-xs text-gray-500">{new Date(entry.savedAt).toLocaleString('id-ID')}</span>
                       </div>
@@ -2645,11 +2676,11 @@ export default function RuleScreener({ market = 'ID' }) {
                           : 'bg-red-900/30 border border-red-500/30'
                       }`}>
                         <h4 className="text-sm font-semibold text-green-400 mb-2">
-                          📈 Harga Konfirmasi (H+1: {result.nextDayData.date})
+                          📈 Harga Konfirmasi (H+{result.horizonDays || returnHorizonDays}: {result.nextDayData.date})
                         </h4>
                         <p className="text-xs text-gray-400 mb-2">
-                          Harga hari berikutnya setelah tanggal target.
-                          Perubahan dihitung dari Close H ({isUS ? '$' : 'Rp '}{isUS ? result.ohlcv?.close?.toFixed(2) : result.ohlcv?.close?.toLocaleString('id-ID') || 'N/A'}) ke Close H+1.
+                          Harga hari ke-{result.horizonDays || returnHorizonDays} setelah tanggal target.
+                          Perubahan dihitung dari Close H ({isUS ? '$' : 'Rp '}{isUS ? result.ohlcv?.close?.toFixed(2) : result.ohlcv?.close?.toLocaleString('id-ID') || 'N/A'}) ke Close H+{result.horizonDays || returnHorizonDays}.
                         </p>
                         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
                           <div>

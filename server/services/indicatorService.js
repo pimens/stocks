@@ -632,14 +632,16 @@ class IndicatorService {
     };
   }
 
-  // Generate regression dataset with indicators from H-1 and target from H
-  // Options: { upThreshold: 1.0, downThreshold: -0.5, includeNeutral: false }
+  // Generate regression dataset with indicators from H-1 and target from H+n
+  // Options: { upThreshold: 1.0, downThreshold: -0.5, includeNeutral: false, horizonDays: 1 }
   generateRegressionDataset(prices, startDate, endDate, options = {}) {
     const {
       upThreshold = 1.0,      // Target = 1 if return >= +1%
       downThreshold = -0.5,   // Target = 0 if return <= -0.5%
-      includeNeutral = false  // Whether to include neutral (between thresholds)
+      includeNeutral = false,  // Whether to include neutral (between thresholds)
+      horizonDays = 1
     } = options;
+    const horizon = Math.max(1, parseInt(horizonDays, 10) || 1);
 
     // Helper function to safely format numbers
     const safeToFixed = (val, decimals = 2) => {
@@ -650,7 +652,7 @@ class IndicatorService {
     const indicators = this.calculateIndicatorsForRegression(prices);
     const dataset = [];
 
-    for (let i = 2; i < prices.length; i++) { // Start from 2 to have previous day delta
+    for (let i = 2; i < prices.length - horizon; i++) { // Need future data for H+n
       const currentDate = new Date(prices[i].date);
       const prevDate = new Date(prices[i - 1].date);
       
@@ -661,8 +663,10 @@ class IndicatorService {
       const prevClose = prices[i - 1].close;
       const currentClose = prices[i].close;
       const currentOpen = prices[i].open;
-      const priceChange = currentClose - prevClose;
-      const priceChangePercent = ((currentClose - prevClose) / prevClose) * 100;
+      const futureIndex = i + horizon;
+      const futureClose = prices[futureIndex].close;
+      const priceChange = futureClose - currentClose;
+      const priceChangePercent = currentClose > 0 ? ((futureClose - currentClose) / currentClose) * 100 : 0;
 
       // NEW TARGET LOGIC: Based on return thresholds
       let target;
@@ -727,6 +731,7 @@ class IndicatorService {
       const row = {
         date: prices[i].date,
         prevDate: prices[i - 1].date,
+        horizonDays: horizon,
         target,
         targetLabel,
         priceChange: parseFloat(priceChange.toFixed(2)),
@@ -734,6 +739,8 @@ class IndicatorService {
         prevClose: parseFloat(prevClose.toFixed(2)),
         currentClose: parseFloat(currentClose.toFixed(2)),
         currentOpen: parseFloat(currentOpen?.toFixed(2) || 0),
+        futureDate: prices[futureIndex].date,
+        futureClose: parseFloat(futureClose.toFixed(2)),
         prevOpen: parseFloat(prevOpen?.toFixed(2) || 0),
         prevHigh: parseFloat(prevHigh?.toFixed(2) || 0),
         prevLow: parseFloat(prevLow?.toFixed(2) || 0),
@@ -1085,8 +1092,8 @@ class IndicatorService {
   // Get indicator data for a specific date (H-1 data for predicting date H)
   // targetDate: the date we want to predict (H)
   // timeframe: aggregate daily data to N-day candles (1=daily, 3=3-day, 5=weekly, etc.)
-  // Returns indicators from the day before (H-1)
-  getIndicatorsForDate(prices, targetDate, timeframe = 1) {
+  // Returns indicators from the day before (H-1) plus futureData for H+n
+  getIndicatorsForDate(prices, targetDate, timeframe = 1, horizonDays = 1) {
     // Helper function to safely format numbers
     const safeToFixed = (val, decimals = 2) => {
       if (val === null || val === undefined || isNaN(val)) return null;
@@ -1095,6 +1102,7 @@ class IndicatorService {
 
     // Resample data to specified timeframe
     const resampledPrices = this.resampleToTimeframe(prices, timeframe);
+    const horizon = Math.max(1, parseInt(horizonDays, 10) || 1);
     
     const indicators = this.calculateIndicatorsForRegression(resampledPrices);
     
@@ -1203,6 +1211,19 @@ class IndicatorService {
       priceChangePercent: ((resampledPrices[i].close - prevClose) / prevClose) * 100
     };
 
+    const futureIdx = i + horizon;
+    const futureData = futureIdx < resampledPrices.length ? {
+      date: resampledPrices[futureIdx].date,
+      open: resampledPrices[futureIdx].open,
+      high: resampledPrices[futureIdx].high,
+      low: resampledPrices[futureIdx].low,
+      close: resampledPrices[futureIdx].close,
+      volume: resampledPrices[futureIdx].volume,
+      priceChange: resampledPrices[futureIdx].close - prevClose,
+      priceChangePercent: ((resampledPrices[futureIdx].close - prevClose) / prevClose) * 100,
+      horizonDays: horizon
+    } : null;
+
     const row = {
       // Meta info
       symbol: null, // Will be set by caller
@@ -1213,6 +1234,8 @@ class IndicatorService {
       
       // Actual data for verification (if available) - not available for future dates
       actualData: isFutureDate ? null : actualData,
+      futureData: isFutureDate ? null : futureData,
+      horizonDays: horizon,
       
       // Indicator data (H-1)
       prevClose: parseFloat(prevClose.toFixed(2)),

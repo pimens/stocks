@@ -139,7 +139,8 @@ exports.handler = async (event, context) => {
         endDate,
         upThreshold = 1.0,
         downThreshold = -0.5,
-        includeNeutral = false
+        includeNeutral = false,
+        horizonDays = 1
       } = JSON.parse(event.body || '{}');
       
       if (!symbols || !Array.isArray(symbols) || symbols.length === 0) {
@@ -155,7 +156,8 @@ exports.handler = async (event, context) => {
       const options = {
         upThreshold: parseFloat(upThreshold),
         downThreshold: parseFloat(downThreshold),
-        includeNeutral: Boolean(includeNeutral)
+        includeNeutral: Boolean(includeNeutral),
+        horizonDays: parseInt(horizonDays, 10) || 1
       };
 
       for (const symbol of symbols) {
@@ -371,7 +373,7 @@ exports.handler = async (event, context) => {
 
     // POST /api/stocks/live-indicators
     if (action === 'live-indicators' && event.httpMethod === 'POST') {
-      const { symbol, targetDate, useRealtime = true, timeframe = 1, market = 'ID' } = JSON.parse(event.body || '{}');
+      const { symbol, targetDate, useRealtime = true, timeframe = 1, market = 'ID', horizonDays = 1 } = JSON.parse(event.body || '{}');
       
       if (!symbol) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Please provide a stock symbol' }) };
@@ -437,7 +439,7 @@ exports.handler = async (event, context) => {
         }
       }
 
-      const indicatorData = indicatorService.getIndicatorsForDate(prices, targetDate, tf);
+      const indicatorData = indicatorService.getIndicatorsForDate(prices, targetDate, tf, parseInt(horizonDays, 10) || 1);
       
       if (indicatorData.error) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: indicatorData.error }) };

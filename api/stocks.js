@@ -157,7 +157,8 @@ module.exports = async (req, res) => {
         endDate,
         upThreshold = 1.0,
         downThreshold = -0.5,
-        includeNeutral = false
+        includeNeutral = false,
+        horizonDays = 1
       } = req.body;
 
       if (!symbols || !Array.isArray(symbols) || symbols.length === 0) {
@@ -174,7 +175,8 @@ module.exports = async (req, res) => {
       const options = {
         upThreshold: parseFloat(upThreshold),
         downThreshold: parseFloat(downThreshold),
-        includeNeutral: Boolean(includeNeutral)
+        includeNeutral: Boolean(includeNeutral),
+        horizonDays: parseInt(horizonDays, 10) || 1
       };
 
       for (const symbol of symbols) {
@@ -390,7 +392,7 @@ module.exports = async (req, res) => {
 
     // POST /api/stocks/live-indicators - Get live indicator data with realtime support
     if (action === 'live-indicators' && req.method === 'POST') {
-      const { symbol, targetDate, useRealtime = true, timeframe = 1, market = 'ID' } = req.body;
+      const { symbol, targetDate, useRealtime = true, timeframe = 1, market = 'ID', horizonDays = 1 } = req.body;
       
       if (!symbol) {
         return res.status(400).json({ error: 'Please provide a stock symbol' });
@@ -463,7 +465,7 @@ module.exports = async (req, res) => {
       }
 
       // Calculate indicators for the target date with timeframe
-      const indicatorData = indicatorService.getIndicatorsForDate(prices, targetDate, tf);
+      const indicatorData = indicatorService.getIndicatorsForDate(prices, targetDate, tf, parseInt(horizonDays, 10) || 1);
       
       if (indicatorData.error) {
         return res.status(400).json({ error: indicatorData.error });
