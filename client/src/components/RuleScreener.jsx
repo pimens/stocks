@@ -791,6 +791,10 @@ export default function RuleScreener({ market = 'ID' }) {
   const [showBacktestHistory, setShowBacktestHistory] = useState(false)
   const [expandedHistoryIds, setExpandedHistoryIds] = useState(new Set())
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
+  const [backtestGroups, setBacktestGroups] = useState([])
+  const [newBacktestGroupName, setNewBacktestGroupName] = useState('')
+  const [selectedSaveGroup, setSelectedSaveGroup] = useState('')
+  const [selectedHistoryGroupFilter, setSelectedHistoryGroupFilter] = useState('all')
 
   // Load saved presets & history from localStorage
   useEffect(() => {
@@ -808,6 +812,17 @@ export default function RuleScreener({ market = 'ID' }) {
         setBacktestHistory(JSON.parse(savedHistory))
       } catch (e) {
         console.error('Failed to load backtest history:', e)
+      }
+    }
+    const savedGroups = localStorage.getItem('backtestGroups')
+    if (savedGroups) {
+      try {
+        const parsed = JSON.parse(savedGroups)
+        if (Array.isArray(parsed)) {
+          setBacktestGroups(parsed.filter(g => typeof g === 'string' && g.trim()))
+        }
+      } catch (e) {
+        console.error('Failed to load backtest groups:', e)
       }
     }
   }, [])
@@ -1361,6 +1376,7 @@ export default function RuleScreener({ market = 'ID' }) {
       winCriteriaLabel: backtestResult.winCriteriaLabel || BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.label || backtestResult.winCriteria,
       winCriteriaMetricShort: backtestResult.winCriteriaMetricShort || BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.metricShort || backtestResult.winCriteria,
       winCriteriaMetricLong: backtestResult.winCriteriaMetricLong || BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.metricLong || backtestResult.winCriteria,
+      group: selectedSaveGroup || '',
       startDate: backtestResult.startDate,
       endDate: backtestResult.endDate,
       symbolsCount: backtestResult.symbolsCount,
@@ -1386,6 +1402,67 @@ export default function RuleScreener({ market = 'ID' }) {
     setBacktestHistory(updated)
     localStorage.setItem('backtestHistory', JSON.stringify(updated))
   }
+
+  const addBacktestGroup = () => {
+    const nextName = newBacktestGroupName.trim()
+    if (!nextName) return
+    if (backtestGroups.some(g => g.toLowerCase() === nextName.toLowerCase())) {
+      return
+    }
+    const updated = [...backtestGroups, nextName]
+    setBacktestGroups(updated)
+    localStorage.setItem('backtestGroups', JSON.stringify(updated))
+    setNewBacktestGroupName('')
+  }
+
+  const deleteBacktestGroup = (groupName) => {
+    const updatedGroups = backtestGroups.filter(g => g !== groupName)
+    setBacktestGroups(updatedGroups)
+    localStorage.setItem('backtestGroups', JSON.stringify(updatedGroups))
+
+    const updatedHistory = backtestHistory.map(entry => (
+      entry.group === groupName ? { ...entry, group: '' } : entry
+    ))
+    setBacktestHistory(updatedHistory)
+    localStorage.setItem('backtestHistory', JSON.stringify(updatedHistory))
+
+    if (selectedSaveGroup === groupName) {
+      setSelectedSaveGroup('')
+    }
+    if (selectedHistoryGroupFilter === groupName) {
+      setSelectedHistoryGroupFilter('all')
+    }
+  }
+
+  const updateHistoryEntryGroup = (entryId, groupName) => {
+    const updated = backtestHistory.map(h => (
+      h.id === entryId ? { ...h, group: groupName } : h
+    ))
+    setBacktestHistory(updated)
+    localStorage.setItem('backtestHistory', JSON.stringify(updated))
+  }
+
+  const toggleHistoryFavorite = (entryId) => {
+    const updated = backtestHistory.map(h => (
+      h.id === entryId ? { ...h, favorite: !h.favorite } : h
+    ))
+    setBacktestHistory(updated)
+    localStorage.setItem('backtestHistory', JSON.stringify(updated))
+  }
+
+  const deleteHistoryEntry = (entryId) => {
+    const updated = backtestHistory.filter(h => h.id !== entryId)
+    setBacktestHistory(updated)
+    localStorage.setItem('backtestHistory', JSON.stringify(updated))
+  }
+
+  const visibleHistoryEntries = useMemo(() => {
+    return backtestHistory.filter(entry => {
+      const passFavorite = !showFavoritesOnly || entry.favorite
+      const passGroup = selectedHistoryGroupFilter === 'all' || (entry.group || '') === selectedHistoryGroupFilter
+      return passFavorite && passGroup
+    })
+  }, [backtestHistory, showFavoritesOnly, selectedHistoryGroupFilter])
 
   // Run screening
   const runScreener = async () => {
@@ -2311,10 +2388,39 @@ export default function RuleScreener({ market = 'ID' }) {
               </p>
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-end gap-2">
+              <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+                <select
+                  value={selectedSaveGroup}
+                  onChange={(e) => setSelectedSaveGroup(e.target.value)}
+                  className="px-3 py-2 rounded-lg bg-gray-700 border border-gray-600 text-gray-100 text-sm"
+                  title="Pilih kelompok saat menyimpan"
+                >
+                  <option value="">Tanpa Kelompok</option>
+                  {backtestGroups.map(group => (
+                    <option key={group} value={group}>{group}</option>
+                  ))}
+                </select>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newBacktestGroupName}
+                    onChange={(e) => setNewBacktestGroupName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') addBacktestGroup() }}
+                    placeholder="Tambah kelompok baru"
+                    className="px-3 py-2 rounded-lg bg-gray-700 border border-gray-600 text-gray-100 text-sm min-w-[180px]"
+                  />
+                  <button
+                    onClick={addBacktestGroup}
+                    className="px-3 py-2 rounded-lg bg-gray-600 hover:bg-gray-500 text-white text-sm"
+                  >
+                    Tambah
+                  </button>
+                </div>
+              </div>
               <button
                 onClick={saveBacktestToHistory}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium"
+                className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium"
               >
                 <FiSave className="w-4 h-4" />
                 Simpan ke Histori
@@ -2430,7 +2536,7 @@ export default function RuleScreener({ market = 'ID' }) {
       </div>
 
       {/* Backtest History Panel */}
-      {backtestHistory.length > 0 && (
+      {(backtestHistory.length > 0 || backtestGroups.length > 0) && (
         <div className="bg-gray-800 rounded-lg border border-gray-700">
           <button
             onClick={() => setShowBacktestHistory(v => !v)}
@@ -2450,13 +2556,63 @@ export default function RuleScreener({ market = 'ID' }) {
                   {showFavoritesOnly ? 'Semua' : 'Favorit'}
                 </button>
               )}
+              {backtestGroups.length > 0 && (
+                <select
+                  value={selectedHistoryGroupFilter}
+                  onChange={(e) => setSelectedHistoryGroupFilter(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-xs px-2 py-0.5 rounded bg-gray-700 border border-gray-600 text-gray-200"
+                  title="Filter histori berdasarkan kelompok"
+                >
+                  <option value="all">Semua Kelompok</option>
+                  <option value="">Tanpa Kelompok</option>
+                  {backtestGroups.map(group => (
+                    <option key={group} value={group}>{group}</option>
+                  ))}
+                </select>
+              )}
             </div>
             {showBacktestHistory ? <FiChevronUp className="w-5 h-5 text-gray-400" /> : <FiChevronDown className="w-5 h-5 text-gray-400" />}
           </button>
 
           {showBacktestHistory && (
             <div className="px-4 pb-4 space-y-3 border-t border-gray-700 pt-4">
-              {backtestHistory.filter(entry => !showFavoritesOnly || entry.favorite).map(entry => (
+              <div className="bg-gray-900/40 rounded-lg border border-gray-700 p-3">
+                <div className="text-xs text-gray-300 mb-2">Kelompok Backtest</div>
+                <div className="flex flex-col sm:flex-row gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={newBacktestGroupName}
+                    onChange={(e) => setNewBacktestGroupName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') addBacktestGroup() }}
+                    placeholder="Contoh: Scalping, Swing, Gap Up"
+                    className="flex-1 px-3 py-2 rounded bg-gray-700 border border-gray-600 text-gray-100 text-sm"
+                  />
+                  <button
+                    onClick={addBacktestGroup}
+                    className="px-3 py-2 rounded bg-indigo-700 hover:bg-indigo-600 text-white text-sm"
+                  >
+                    Tambah Kelompok
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <span className="text-xs px-2 py-1 rounded bg-gray-700 text-gray-300">Tanpa Kelompok</span>
+                  {backtestGroups.map(group => (
+                    <span key={group} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
+                      {group}
+                      <button
+                        onClick={() => deleteBacktestGroup(group)}
+                        className="text-red-300 hover:text-red-200"
+                        title={`Hapus kelompok ${group}`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {visibleHistoryEntries.map(entry => (
                 <div key={entry.id} className="bg-gray-900/60 rounded-lg border border-gray-700">
                   <button
                     onClick={() => setExpandedHistoryIds(prev => { const next = new Set(prev); next.has(entry.id) ? next.delete(entry.id) : next.add(entry.id); return next; })}
@@ -2473,6 +2629,9 @@ export default function RuleScreener({ market = 'ID' }) {
                         )}
                         <span className="text-white font-medium text-sm">{entry.name}</span>
                         <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300">{entry.market || 'ID'}</span>
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300">
+                          Kelompok: {entry.group || 'Tanpa Kelompok'}
+                        </span>
                         <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
                           entry.winCriteria === 'gapup_open_prevclose'
                             ? 'bg-cyan-500/20 text-cyan-300'
@@ -2502,12 +2661,22 @@ export default function RuleScreener({ market = 'ID' }) {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      <select
+                        value={entry.group || ''}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => updateHistoryEntryGroup(entry.id, e.target.value)}
+                        className="text-xs px-2 py-1 rounded bg-gray-700 border border-gray-600 text-gray-200"
+                        title="Pilih kelompok"
+                      >
+                        <option value="">Tanpa Kelompok</option>
+                        {backtestGroups.map(group => (
+                          <option key={group} value={group}>{group}</option>
+                        ))}
+                      </select>
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          const updated = backtestHistory.map(h => h.id === entry.id ? { ...h, favorite: !h.favorite } : h)
-                          setBacktestHistory(updated)
-                          localStorage.setItem('backtestHistory', JSON.stringify(updated))
+                          toggleHistoryFavorite(entry.id)
                         }}
                         className={`p-1.5 rounded transition-colors ${
                           entry.favorite
@@ -2527,9 +2696,7 @@ export default function RuleScreener({ market = 'ID' }) {
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          const updated = backtestHistory.filter(h => h.id !== entry.id)
-                          setBacktestHistory(updated)
-                          localStorage.setItem('backtestHistory', JSON.stringify(updated))
+                          deleteHistoryEntry(entry.id)
                         }}
                         className="text-xs px-2 py-1 rounded bg-red-900/40 hover:bg-red-700/60 text-red-400"
                       >
@@ -2623,6 +2790,7 @@ export default function RuleScreener({ market = 'ID' }) {
                   onClick={() => {
                     if (confirm('Hapus semua histori backtest?')) {
                       setBacktestHistory([])
+                      setSelectedHistoryGroupFilter('all')
                       localStorage.removeItem('backtestHistory')
                     }
                   }}
@@ -2630,6 +2798,9 @@ export default function RuleScreener({ market = 'ID' }) {
                 >
                   Hapus Semua Histori
                 </button>
+              )}
+              {visibleHistoryEntries.length === 0 && (
+                <div className="text-xs text-gray-400">Tidak ada histori yang sesuai filter favorit/kelompok.</div>
               )}
             </div>
           )}
