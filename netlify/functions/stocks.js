@@ -1,5 +1,5 @@
 const stockService = require('./stockService');
-const indicatorService = require('./indicatorService');
+const indicatorService = require('../../lib/indicatorService');
 
 exports.handler = async (event, context) => {
   // Enable CORS

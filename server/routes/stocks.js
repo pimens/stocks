@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const stockService = require('../services/stockService');
-const indicatorService = require('../services/indicatorService');
+const indicatorService = require('../../lib/indicatorService');
 
 // Get list of popular Indonesian stocks
 router.get('/popular', (req, res) => {

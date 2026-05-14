@@ -1,5 +1,5 @@
 const stockService = require('./stockService');
-const indicatorService = require('./indicatorService');
+const indicatorService = require('../../lib/indicatorService');
 const aiService = require('./aiService');
 
 exports.handler = async (event, context) => {

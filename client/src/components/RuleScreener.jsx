@@ -296,12 +296,11 @@ const getWinCriteriaDisplay = (criteria, horizonDays = 1) => {
   const base = BACKTEST_WIN_CRITERIA[criteria] || {}
   if (criteria !== 'return_h1_positive') return base
 
-  const horizonLabel = `H+${normalizeHorizonDays(horizonDays)}`
   return {
     ...base,
-    label: `Win jika Return ${horizonLabel} > 0%`,
-    metricShort: `Return ${horizonLabel}`,
-    metricLong: `Return ${horizonLabel} (close vs signal close)`,
+    label: 'Win jika Return H+1 > 0%',
+    metricShort: 'Return H+1',
+    metricLong: 'Return H+1 (close vs signal close)',
   }
 }
 
@@ -1004,7 +1003,7 @@ export default function RuleScreener({ market = 'ID' }) {
 
   const runBacktest = async () => {
     const stocks = getSelectedStocks()
-    const horizonDays = normalizeHorizonDays(returnHorizonDays)
+    const horizonDays = 1
 
     if (rules.length === 0) {
       setBacktestError('Tambahkan minimal satu rule sebelum backtest')
@@ -1187,7 +1186,7 @@ export default function RuleScreener({ market = 'ID' }) {
       ['Backtest Summary', ''],
       ['Periode', `${backtestResult.startDate} s/d ${backtestResult.endDate}`],
       ['Win Criteria', backtestResult.winCriteriaLabel || BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.label || backtestResult.winCriteria],
-      ['Horizon', `H+${backtestResult.returnHorizonDays || 1}`],
+      ['Horizon', 'H+1'],
       ['Symbols', backtestResult.symbolsCount],
       ['Samples Evaluated', backtestResult.samplesEvaluated],
       [],
@@ -1495,10 +1494,10 @@ export default function RuleScreener({ market = 'ID' }) {
       const isToday = targetDate === today
       const isPastDate = targetDate < today
       
-      const horizonDays = normalizeHorizonDays(returnHorizonDays)
+      const horizonDays = 1
 
       console.log(`[RuleScreener] User selected: ${targetDate}`)
-      console.log(`[RuleScreener] Horizon: H+${horizonDays}`)
+      console.log('[RuleScreener] Confirmation day: H+1')
       
       for (let i = 0; i < stocks.length; i++) {
         const symbol = stocks[i]
@@ -1513,9 +1512,9 @@ export default function RuleScreener({ market = 'ID' }) {
           if (response?.data) {
             const latestData = response.data
             
-            // indicatorDate = tanggal indikator dihitung (targetDate)
+            // indicatorDate = tanggal indikator dihitung (targetDate / H)
             // actualData = harga tanggal screening (H)
-            // futureData = harga H+n untuk validasi swing trade
+            // futureData = harga konfirmasi hari berikutnya (H+1)
             const screeningDayOHLCV = {
               open: latestData.actualData?.open ?? latestData.prevOpen,
               high: latestData.actualData?.high ?? latestData.prevHigh,
@@ -1541,7 +1540,7 @@ export default function RuleScreener({ market = 'ID' }) {
               ? ruleResults.every(r => r.passed)
               : ruleResults.some(r => r.passed)
 
-            // Confirmation data for H+n
+            // Confirmation data for next trading day (H+1)
             let nextDayData = null
             if (isPastDate && latestData.futureData) {
               const baseClose = screeningDayOHLCV.close
@@ -1569,7 +1568,7 @@ export default function RuleScreener({ market = 'ID' }) {
               // Tanggal indikator sebenarnya dari API (should match targetDate)
               indicatorDate: response.info?.indicatorDate || targetDate,
               screeningGapOpenPercent,
-              // Tanggal harga konfirmasi (H+n)
+              // Tanggal harga konfirmasi (H+1)
               nextDayData,
               actuallyUp: nextDayData ? nextDayData.change > 0 : null,
               horizonDays,
@@ -2289,19 +2288,19 @@ export default function RuleScreener({ market = 'ID' }) {
 
         <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Horizon Return (hari)</label>
+            <label className="block text-sm text-gray-400 mb-1">Horizon Konfirmasi</label>
             <input
               type="number"
               min="1"
               step="1"
-              value={returnHorizonDays}
-              onChange={(e) => setReturnHorizonDays(normalizeHorizonDays(e.target.value))}
-              className="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 text-white"
+              value={1}
+              disabled
+              className="w-full px-3 py-2 bg-gray-800 rounded border border-gray-700 text-gray-300 cursor-not-allowed"
             />
           </div>
           <div className="flex items-end">
             <p className="text-xs text-gray-400">
-              Return dihitung dari close tanggal sinyal ke close H+N. Preview screening dan backtest memakai horizon yang sama.
+              Rule selalu dievaluasi pada tanggal sinyal H, lalu konfirmasi win selalu memakai data hari berikutnya, yaitu H+1.
             </p>
           </div>
         </div>
@@ -2320,7 +2319,7 @@ export default function RuleScreener({ market = 'ID' }) {
             ))}
           </select>
           <p className="text-xs text-gray-400 mt-1">
-            Pilih kriteria menang untuk kebutuhan strategi (return H+n positif atau gap-up saat open).
+            Pilih kriteria menang untuk mengecek hari setelah sinyal: close H+1 lebih tinggi dari close H, atau open H+1 gap-up terhadap close H.
           </p>
         </div>
 
@@ -2637,7 +2636,7 @@ export default function RuleScreener({ market = 'ID' }) {
                             ? 'bg-cyan-500/20 text-cyan-300'
                             : 'bg-yellow-500/20 text-yellow-300'
                         }`}>
-                          {entry.winCriteriaLabel || (entry.winCriteria === 'gapup_open_prevclose' ? 'Gap Open' : `Return H+${entry.returnHorizonDays || 1}`)}
+                          {entry.winCriteriaLabel || (entry.winCriteria === 'gapup_open_prevclose' ? 'Gap Open' : 'Return H+1')}
                         </span>
                         <span className="text-xs text-gray-500">{new Date(entry.savedAt).toLocaleString('id-ID')}</span>
                       </div>
@@ -3068,11 +3067,11 @@ export default function RuleScreener({ market = 'ID' }) {
                           : 'bg-red-900/30 border border-red-500/30'
                       }`}>
                         <h4 className="text-sm font-semibold text-green-400 mb-2">
-                          📈 Harga Konfirmasi (H+{result.horizonDays || returnHorizonDays}: {result.nextDayData.date})
+                          📈 Harga Konfirmasi (H+1: {result.nextDayData.date})
                         </h4>
                         <p className="text-xs text-gray-400 mb-2">
-                          Harga hari ke-{result.horizonDays || returnHorizonDays} setelah tanggal target.
-                          Perubahan dihitung dari Close H ({isUS ? '$' : 'Rp '}{isUS ? result.ohlcv?.close?.toFixed(2) : result.ohlcv?.close?.toLocaleString('id-ID') || 'N/A'}) ke Close H+{result.horizonDays || returnHorizonDays}.
+                          Harga hari berikutnya setelah tanggal target.
+                          Perubahan dihitung dari Close H ({isUS ? '$' : 'Rp '}{isUS ? result.ohlcv?.close?.toFixed(2) : result.ohlcv?.close?.toLocaleString('id-ID') || 'N/A'}) ke Close H+1.
                         </p>
                         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
                           <div>

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const aiService = require('../services/aiService');
 const stockService = require('../services/stockService');
-const indicatorService = require('../services/indicatorService');
+const indicatorService = require('../../lib/indicatorService');
 
 // Get available AI models
 router.get('/models', (req, res) => {
