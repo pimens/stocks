@@ -1445,6 +1445,9 @@ export default function RuleScreener({ market = 'ID' }) {
               low: latestData.actualData?.low ?? latestData.prevLow,
               close: latestData.actualData?.close ?? latestData.prevClose,
             }
+            const screeningGapOpenPercent = Number(latestData.prevClose)
+              ? (((Number(screeningDayOHLCV.open) || 0) - Number(latestData.prevClose)) / Number(latestData.prevClose)) * 100
+              : null
             
             // Evaluate all rules using indicator data
             const ruleResults = rules.map(rule => ({
@@ -1488,6 +1491,7 @@ export default function RuleScreener({ market = 'ID' }) {
               screeningDate: targetDate,
               // Tanggal indikator sebenarnya dari API (should match targetDate)
               indicatorDate: response.info?.indicatorDate || targetDate,
+              screeningGapOpenPercent,
               // Tanggal harga konfirmasi (H+n)
               nextDayData,
               actuallyUp: nextDayData ? nextDayData.change > 0 : null,
@@ -1568,14 +1572,24 @@ export default function RuleScreener({ market = 'ID' }) {
 
   const allResultsWithCriteria = useMemo(() => {
     return allResults.map(result => {
-      if (!result.nextDayData) return result
+      if (!result.nextDayData && result.screeningGapOpenPercent == null) return result
       let actuallyUp
       let outcomeDisplayPct
       const prevClose = result.ohlcv?.close || result.data?.prevClose
       if (screenerWinCriteria === 'gapup_open_prevclose') {
-        const nextOpen = result.nextDayData.open
-        if (prevClose != null && nextOpen != null && prevClose > 0) {
-          const gapPct = ((nextOpen - prevClose) / prevClose) * 100
+        if (result.nextDayData) {
+          const nextOpen = result.nextDayData.open
+          if (prevClose != null && nextOpen != null && prevClose > 0) {
+            const gapPct = ((nextOpen - prevClose) / prevClose) * 100
+            actuallyUp = gapPct > 0
+            outcomeDisplayPct = gapPct
+          } else {
+            // fallback: not enough data
+            actuallyUp = null
+            outcomeDisplayPct = null
+          }
+        } else if (result.screeningGapOpenPercent != null) {
+          const gapPct = result.screeningGapOpenPercent
           actuallyUp = gapPct > 0
           outcomeDisplayPct = gapPct
         } else {
@@ -1584,8 +1598,13 @@ export default function RuleScreener({ market = 'ID' }) {
           outcomeDisplayPct = null
         }
       } else {
-        actuallyUp = result.nextDayData.change > 0
-        outcomeDisplayPct = result.nextDayData.change
+        if (result.nextDayData) {
+          actuallyUp = result.nextDayData.change > 0
+          outcomeDisplayPct = result.nextDayData.change
+        } else {
+          actuallyUp = null
+          outcomeDisplayPct = null
+        }
       }
       return { ...result, actuallyUp, outcomeDisplayPct }
     })
@@ -2664,13 +2683,13 @@ export default function RuleScreener({ market = 'ID' }) {
               <div className="text-2xl font-bold text-green-400">{results.length}</div>
               <div className="text-xs text-gray-400">Lolos Rules</div>
             </div>
-            {allResults.some(r => r.nextDayData) && (
+            {allResults.some(r => r.nextDayData || r.screeningGapOpenPercent != null) && (
               <>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-blue-400">
                     {results.filter(r => r.actuallyUp).length}/{results.length}
                   </div>
-                  <div className="text-xs text-gray-400">Lolos & Naik Besok</div>
+                  <div className="text-xs text-gray-400">Lolos & Naik / Gap Up</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-yellow-400">
@@ -2693,12 +2712,14 @@ export default function RuleScreener({ market = 'ID' }) {
                   Indikator (RSI, MACD, dll) & harga close dari tanggal ini
                 </span>
               </div>
-              {allResults.some(r => r.nextDayData) && (
+              {allResults.some(r => r.nextDayData || r.screeningGapOpenPercent != null) && (
                 <div className="flex items-start gap-2 p-2 bg-green-900/30 rounded">
                   <span className="text-green-400 font-semibold whitespace-nowrap">📈 Tanggal Konfirmasi:</span>
                   <span className="text-gray-300">
-                    <strong className="text-green-300">{allResults.find(r => r.nextDayData)?.nextDayData?.date || '?'}</strong> — 
-                    Harga besok untuk validasi apakah rule berhasil
+                    <strong className="text-green-300">{allResults.find(r => r.nextDayData)?.nextDayData?.date || targetDate}</strong> — 
+                    {allResults.some(r => r.nextDayData)
+                      ? 'Harga besok untuk validasi apakah rule berhasil'
+                      : 'Harga pada tanggal screening untuk cek gap-up realtime'}
                   </span>
                 </div>
               )}
@@ -2710,7 +2731,7 @@ export default function RuleScreener({ market = 'ID' }) {
               📊 Hasil Screening
             </h3>
             <div className="flex flex-wrap items-center gap-3">
-              {allResults.some(r => r.nextDayData) && (
+              {allResults.some(r => r.nextDayData || r.screeningGapOpenPercent != null) && (
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-400 whitespace-nowrap">Kriteria:</span>
                   <select
@@ -2767,16 +2788,22 @@ export default function RuleScreener({ market = 'ID' }) {
                           : (result.ohlcv?.close || result.data?.prevClose)?.toLocaleString('id-ID')}
                       </span>
                     )}
-                    {/* Next day confirmation */}
-                    {result.nextDayData && result.outcomeDisplayPct != null && (
+                    {/* Confirmation / Gap preview */}
+                    {(result.nextDayData && result.outcomeDisplayPct != null) || (result.nextDayData == null && result.screeningGapOpenPercent != null) ? (
                       <span className={`px-2 py-0.5 rounded text-sm ${
                         result.actuallyUp
                           ? 'bg-green-500/20 text-green-400'
                           : 'bg-red-500/20 text-red-400'
-                      }`} title={screenerWinCriteria === 'gapup_open_prevclose' ? `Gap Open vs PrevClose ke tanggal ${result.nextDayData.date}` : `Return ke tanggal ${result.nextDayData.date}`}>
-                        {screenerWinCriteria === 'gapup_open_prevclose' ? '🚀' : '📈'} {result.outcomeDisplayPct >= 0 ? '+' : ''}{result.outcomeDisplayPct?.toFixed(2)}%
+                      }`} title={
+                        screenerWinCriteria === 'gapup_open_prevclose'
+                          ? `Gap Open vs PrevClose ke tanggal ${result.nextDayData?.date || result.screeningDate}`
+                          : `Return ke tanggal ${result.nextDayData?.date || result.screeningDate}`
+                      }>
+                        {screenerWinCriteria === 'gapup_open_prevclose' ? '🚀' : '📈'} {' '}
+                        {(result.outcomeDisplayPct ?? result.screeningGapOpenPercent) >= 0 ? '+' : ''}
+                        {(result.outcomeDisplayPct ?? result.screeningGapOpenPercent)?.toFixed(2)}%
                       </span>
-                    )}
+                    ) : null}
                     {result.error && (
                       <span className="text-red-400 text-sm">⚠️ {result.error}</span>
                     )}
@@ -2799,7 +2826,7 @@ export default function RuleScreener({ market = 'ID' }) {
                       <p className="text-xs text-gray-400 mb-2">
                         Indikator teknikal & harga dari tanggal yang Anda pilih. Close adalah <strong>basis perbandingan</strong> untuk konfirmasi.
                       </p>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mt-2 pt-2 border-t border-yellow-500/20">
+                      <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-sm mt-2 pt-2 border-t border-yellow-500/20">
                         <div>
                           <div className="text-gray-400 text-xs">Open</div>
                           <div className="text-white">{isUS ? '$' : 'Rp '}{isUS ? result.ohlcv.open?.toFixed(2) : result.ohlcv.open?.toLocaleString('id-ID') || '-'}</div>
@@ -2816,9 +2843,51 @@ export default function RuleScreener({ market = 'ID' }) {
                           <div className="text-gray-400 text-xs">Close (Basis)</div>
                           <div className="text-yellow-400 font-semibold">{isUS ? '$' : 'Rp '}{isUS ? result.ohlcv.close?.toFixed(2) : result.ohlcv.close?.toLocaleString('id-ID') || '-'}</div>
                         </div>
+                        <div>
+                          <div className="text-gray-400 text-xs">Prev Close</div>
+                          <div className="text-white">{isUS ? '$' : 'Rp '}{isUS ? result.data?.prevClose?.toFixed(2) : result.data?.prevClose?.toLocaleString('id-ID') || '-'}</div>
+                        </div>
+                        <div>
+                          <div className="text-gray-400 text-xs">Gap Open</div>
+                          <div className={`${(result.screeningGapOpenPercent ?? 0) >= 0 ? 'text-green-400' : 'text-red-400'} font-semibold`}>
+                            {(result.screeningGapOpenPercent ?? 0) >= 0 ? '+' : ''}{(result.screeningGapOpenPercent ?? 0).toFixed(2)}%
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-gray-400 text-xs">Indicator Date</div>
+                          <div className="text-white">{result.indicatorDate || targetDate}</div>
+                        </div>
                       </div>
                     </div>
                     )}
+
+                    {/* Indicator Snapshot */}
+                    <div className="p-3 rounded-lg bg-gray-900/50 border border-gray-700">
+                      <h4 className="text-sm font-semibold text-white mb-2">📑 Snapshot Indikator</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                        {[
+                          ['rsi', 'RSI'],
+                          ['macdHistogram', 'MACD Hist'],
+                          ['adx', 'ADX'],
+                          ['volumeRatio', 'Volume Ratio'],
+                          ['closePosition', 'Close Position'],
+                          ['roc', 'ROC'],
+                          ['stochK', 'Stoch %K'],
+                          ['mfi', 'MFI'],
+                        ].map(([key, label]) => (
+                          <div key={key}>
+                            <div className="text-gray-400 text-xs">{label}</div>
+                            <div className="text-white font-medium">
+                              {result.data?.[key] !== undefined && result.data?.[key] !== null
+                                ? typeof result.data[key] === 'number'
+                                  ? result.data[key].toFixed(2)
+                                  : result.data[key]
+                                : 'N/A'}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
 
                     {/* Next Day Confirmation Box */}
                     {result.nextDayData && (
