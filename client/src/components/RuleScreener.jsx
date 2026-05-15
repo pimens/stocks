@@ -2246,53 +2246,6 @@ export default function RuleScreener({ market = 'ID' }) {
             </div>
           )}
         </div>
-
-        {/* Date Selection */}
-        <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-          <h3 className="text-lg font-semibold text-white mb-3">📅 Tanggal Screening</h3>
-          <div className="space-y-3">
-            <input
-              type="date"
-              value={targetDate}
-              onChange={(e) => setTargetDate(e.target.value)}
-              max={new Date().toISOString().split('T')[0]}
-              className="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 text-white"
-            />
-            <div className="flex gap-2">
-              <button
-                onClick={() => setTargetDate(new Date().toISOString().split('T')[0])}
-                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm"
-              >
-                Hari Ini
-              </button>
-              <button
-                onClick={() => {
-                  const yesterday = new Date()
-                  yesterday.setDate(yesterday.getDate() - 1)
-                  setTargetDate(yesterday.toISOString().split('T')[0])
-                }}
-                className="px-3 py-1 bg-gray-600 hover:bg-gray-500 text-white rounded text-sm"
-              >
-                Kemarin
-              </button>
-              <button
-                onClick={() => {
-                  const lastWeek = new Date()
-                  lastWeek.setDate(lastWeek.getDate() - 7)
-                  setTargetDate(lastWeek.toISOString().split('T')[0])
-                }}
-                className="px-3 py-1 bg-gray-600 hover:bg-gray-500 text-white rounded text-sm"
-              >
-                -7 Hari
-              </button>
-            </div>
-            <p className="text-xs text-gray-500">
-              {targetDate === new Date().toISOString().split('T')[0] 
-                ? '📡 Data realtime akan digunakan jika market sedang berjalan'
-                : '📊 Data historical akan digunakan'}
-            </p>
-          </div>
-        </div>
       </div>
 
       {/* Preset Rules */}
@@ -3189,6 +3142,52 @@ export default function RuleScreener({ market = 'ID' }) {
           )}
         </div>
       )}
+
+      <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+        <h3 className="text-lg font-semibold text-white mb-3">📅 Tanggal Screening</h3>
+        <div className="space-y-3">
+          <input
+            type="date"
+            value={targetDate}
+            onChange={(e) => setTargetDate(e.target.value)}
+            max={new Date().toISOString().split('T')[0]}
+            className="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 text-white"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={() => setTargetDate(new Date().toISOString().split('T')[0])}
+              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm"
+            >
+              Hari Ini
+            </button>
+            <button
+              onClick={() => {
+                const yesterday = new Date()
+                yesterday.setDate(yesterday.getDate() - 1)
+                setTargetDate(yesterday.toISOString().split('T')[0])
+              }}
+              className="px-3 py-1 bg-gray-600 hover:bg-gray-500 text-white rounded text-sm"
+            >
+              Kemarin
+            </button>
+            <button
+              onClick={() => {
+                const lastWeek = new Date()
+                lastWeek.setDate(lastWeek.getDate() - 7)
+                setTargetDate(lastWeek.toISOString().split('T')[0])
+              }}
+              className="px-3 py-1 bg-gray-600 hover:bg-gray-500 text-white rounded text-sm"
+            >
+              -7 Hari
+            </button>
+          </div>
+          <p className="text-xs text-gray-500">
+            {targetDate === new Date().toISOString().split('T')[0]
+              ? '📡 Data realtime akan digunakan jika market sedang berjalan'
+              : '📊 Data historical akan digunakan'}
+          </p>
+        </div>
+      </div>
 
       <div className="flex justify-center">
         <button
