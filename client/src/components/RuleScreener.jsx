@@ -793,8 +793,35 @@ export default function RuleScreener({ market = 'ID' }) {
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
   const [backtestGroups, setBacktestGroups] = useState([])
   const [newBacktestGroupName, setNewBacktestGroupName] = useState('')
-  const [selectedSaveGroup, setSelectedSaveGroup] = useState('')
-  const [selectedHistoryGroupFilter, setSelectedHistoryGroupFilter] = useState('all')
+  const [selectedSaveGroups, setSelectedSaveGroups] = useState([])
+  const [selectedHistoryGroupFilter, setSelectedHistoryGroupFilter] = useState([])
+
+  const UNGROUPED_FILTER = '__ungrouped__'
+
+  const normalizeGroups = useCallback((entry) => {
+    if (Array.isArray(entry?.groups)) {
+      return entry.groups.filter((group) => typeof group === 'string' && group.trim())
+    }
+    if (typeof entry?.group === 'string' && entry.group.trim()) {
+      return [entry.group.trim()]
+    }
+    return []
+  }, [])
+
+  const getGroupLabel = useCallback((entry) => {
+    const groups = normalizeGroups(entry)
+    return groups.length > 0 ? groups.join(', ') : 'Tanpa Kelompok'
+  }, [normalizeGroups])
+
+  const toggleGroupSelection = (currentGroups, groupName) => {
+    const next = new Set(currentGroups)
+    if (next.has(groupName)) {
+      next.delete(groupName)
+    } else {
+      next.add(groupName)
+    }
+    return Array.from(next).sort((a, b) => a.localeCompare(b))
+  }
 
   // Load saved presets & history from localStorage
   useEffect(() => {
@@ -809,7 +836,13 @@ export default function RuleScreener({ market = 'ID' }) {
     const savedHistory = localStorage.getItem('backtestHistory')
     if (savedHistory) {
       try {
-        setBacktestHistory(JSON.parse(savedHistory))
+        const parsedHistory = JSON.parse(savedHistory)
+        if (Array.isArray(parsedHistory)) {
+          setBacktestHistory(parsedHistory.map((entry) => ({
+            ...entry,
+            groups: normalizeGroups(entry),
+          })))
+        }
       } catch (e) {
         console.error('Failed to load backtest history:', e)
       }
@@ -825,7 +858,7 @@ export default function RuleScreener({ market = 'ID' }) {
         console.error('Failed to load backtest groups:', e)
       }
     }
-  }, [])
+  }, [normalizeGroups])
 
   // Get stocks based on selection
   const getSelectedStocks = useCallback(() => {
@@ -1404,7 +1437,8 @@ export default function RuleScreener({ market = 'ID' }) {
       winCriteriaLabel: backtestResult.winCriteriaLabel || BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.label || backtestResult.winCriteria,
       winCriteriaMetricShort: backtestResult.winCriteriaMetricShort || BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.metricShort || backtestResult.winCriteria,
       winCriteriaMetricLong: backtestResult.winCriteriaMetricLong || BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.metricLong || backtestResult.winCriteria,
-      group: selectedSaveGroup || '',
+      groups: [...selectedSaveGroups],
+      group: selectedSaveGroups[0] || '',
       startDate: backtestResult.startDate,
       endDate: backtestResult.endDate,
       symbolsCount: backtestResult.symbolsCount,
@@ -1449,25 +1483,47 @@ export default function RuleScreener({ market = 'ID' }) {
     localStorage.setItem('backtestGroups', JSON.stringify(updatedGroups))
 
     const updatedHistory = backtestHistory.map(entry => (
-      entry.group === groupName ? { ...entry, group: '' } : entry
+      {
+        ...entry,
+        groups: normalizeGroups(entry).filter((group) => group !== groupName),
+        group: normalizeGroups(entry).filter((group) => group !== groupName)[0] || '',
+      }
     ))
     setBacktestHistory(updatedHistory)
     localStorage.setItem('backtestHistory', JSON.stringify(updatedHistory))
 
-    if (selectedSaveGroup === groupName) {
-      setSelectedSaveGroup('')
-    }
-    if (selectedHistoryGroupFilter === groupName) {
-      setSelectedHistoryGroupFilter('all')
-    }
+    setSelectedSaveGroups((prev) => prev.filter((group) => group !== groupName))
+    setSelectedHistoryGroupFilter((prev) => prev.filter((group) => group !== groupName))
   }
 
-  const updateHistoryEntryGroup = (entryId, groupName) => {
-    const updated = backtestHistory.map(h => (
-      h.id === entryId ? { ...h, group: groupName } : h
-    ))
+  const updateHistoryEntryGroups = (entryId, groupName) => {
+    const updated = backtestHistory.map((entry) => {
+      if (entry.id !== entryId) return entry
+      const nextGroups = toggleGroupSelection(normalizeGroups(entry), groupName)
+      return {
+        ...entry,
+        groups: nextGroups,
+        group: nextGroups[0] || '',
+      }
+    })
     setBacktestHistory(updated)
     localStorage.setItem('backtestHistory', JSON.stringify(updated))
+  }
+
+  const toggleHistoryGroupFilter = (groupName) => {
+    setSelectedHistoryGroupFilter((prev) => toggleGroupSelection(prev, groupName))
+  }
+
+  const clearHistoryGroupFilter = () => {
+    setSelectedHistoryGroupFilter([])
+  }
+
+  const toggleSaveGroupSelection = (groupName) => {
+    setSelectedSaveGroups((prev) => toggleGroupSelection(prev, groupName))
+  }
+
+  const clearSaveGroups = () => {
+    setSelectedSaveGroups([])
   }
 
   const toggleHistoryFavorite = (entryId) => {
@@ -1492,10 +1548,16 @@ export default function RuleScreener({ market = 'ID' }) {
   const visibleHistoryEntries = useMemo(() => {
     return backtestHistory.filter(entry => {
       const passFavorite = !showFavoritesOnly || entry.favorite
-      const passGroup = selectedHistoryGroupFilter === 'all' || (entry.group || '') === selectedHistoryGroupFilter
+      const entryGroups = normalizeGroups(entry)
+      const passGroup = selectedHistoryGroupFilter.length === 0
+        || selectedHistoryGroupFilter.some((group) => (
+          group === UNGROUPED_FILTER
+            ? entryGroups.length === 0
+            : entryGroups.includes(group)
+        ))
       return passFavorite && passGroup
     })
-  }, [backtestHistory, showFavoritesOnly, selectedHistoryGroupFilter])
+  }, [backtestHistory, showFavoritesOnly, selectedHistoryGroupFilter, normalizeGroups, UNGROUPED_FILTER])
 
   const selectedVisibleHistoryCount = useMemo(() => (
     visibleHistoryEntries.filter(entry => selectedHistoryExportIds.has(entry.id)).length
@@ -1566,7 +1628,7 @@ export default function RuleScreener({ market = 'ID' }) {
       entry.name,
       new Date(entry.savedAt).toLocaleString('id-ID'),
       entry.market || 'ID',
-      entry.group || 'Tanpa Kelompok',
+      getGroupLabel(entry),
       entry.logicOperator || 'AND',
       entry.winCriteriaLabel || entry.winCriteria,
       entry.startDate,
@@ -1599,7 +1661,7 @@ export default function RuleScreener({ market = 'ID' }) {
     const rulesRows = selectedEntries.flatMap(entry => (
       (entry.rules || []).map((rule, index) => ([
         entry.name,
-        entry.group || 'Tanpa Kelompok',
+        getGroupLabel(entry),
         index + 1,
         ALL_FEATURES[rule.leftFeature]?.label || rule.leftFeature,
         rule.operator,
@@ -2581,17 +2643,43 @@ export default function RuleScreener({ market = 'ID' }) {
 
             <div className="flex flex-col md:flex-row md:items-center md:justify-end gap-2">
               <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
-                <select
-                  value={selectedSaveGroup}
-                  onChange={(e) => setSelectedSaveGroup(e.target.value)}
-                  className="px-3 py-2 rounded-lg bg-gray-700 border border-gray-600 text-gray-100 text-sm"
-                  title="Pilih kelompok saat menyimpan"
-                >
-                  <option value="">Tanpa Kelompok</option>
-                  {backtestGroups.map(group => (
-                    <option key={group} value={group}>{group}</option>
-                  ))}
-                </select>
+                <div className="px-3 py-2 rounded-lg bg-gray-700 border border-gray-600 text-gray-100 text-sm min-w-[220px]">
+                  <div className="text-xs text-gray-300 mb-2">Kelompok saat menyimpan</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {backtestGroups.length === 0 && (
+                      <span className="text-xs text-gray-400">Belum ada kelompok</span>
+                    )}
+                    {backtestGroups.map(group => {
+                      const active = selectedSaveGroups.includes(group)
+                      return (
+                        <button
+                          key={group}
+                          type="button"
+                          onClick={() => toggleSaveGroupSelection(group)}
+                          className={`text-xs px-2 py-1 rounded border transition-colors ${
+                            active
+                              ? 'bg-indigo-600 border-indigo-400 text-white'
+                              : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-600'
+                          }`}
+                        >
+                          {group}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div className="mt-2 text-xs text-gray-400">
+                    {selectedSaveGroups.length > 0 ? `Dipilih: ${selectedSaveGroups.join(', ')}` : 'Tanpa Kelompok'}
+                  </div>
+                  {selectedSaveGroups.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={clearSaveGroups}
+                      className="mt-2 text-xs text-red-300 hover:text-red-200"
+                    >
+                      Reset kelompok terpilih
+                    </button>
+                  )}
+                </div>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -2748,19 +2836,51 @@ export default function RuleScreener({ market = 'ID' }) {
                 </button>
               )}
               {backtestGroups.length > 0 && (
-                <select
-                  value={selectedHistoryGroupFilter}
-                  onChange={(e) => setSelectedHistoryGroupFilter(e.target.value)}
+                <div
                   onClick={(e) => e.stopPropagation()}
-                  className="text-xs px-2 py-0.5 rounded bg-gray-700 border border-gray-600 text-gray-200"
-                  title="Filter histori berdasarkan kelompok"
+                  className="flex flex-wrap items-center gap-1"
+                  title="Filter histori berdasarkan satu atau lebih kelompok"
                 >
-                  <option value="all">Semua Kelompok</option>
-                  <option value="">Tanpa Kelompok</option>
-                  {backtestGroups.map(group => (
-                    <option key={group} value={group}>{group}</option>
-                  ))}
-                </select>
+                  <button
+                    type="button"
+                    onClick={clearHistoryGroupFilter}
+                    className={`text-xs px-2 py-0.5 rounded border ${
+                      selectedHistoryGroupFilter.length === 0
+                        ? 'bg-indigo-600 border-indigo-400 text-white'
+                        : 'bg-gray-700 border-gray-600 text-gray-200'
+                    }`}
+                  >
+                    Semua Kelompok
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => toggleHistoryGroupFilter(UNGROUPED_FILTER)}
+                    className={`text-xs px-2 py-0.5 rounded border ${
+                      selectedHistoryGroupFilter.includes(UNGROUPED_FILTER)
+                        ? 'bg-indigo-600 border-indigo-400 text-white'
+                        : 'bg-gray-700 border-gray-600 text-gray-200'
+                    }`}
+                  >
+                    Tanpa Kelompok
+                  </button>
+                  {backtestGroups.map(group => {
+                    const active = selectedHistoryGroupFilter.includes(group)
+                    return (
+                      <button
+                        key={group}
+                        type="button"
+                        onClick={() => toggleHistoryGroupFilter(group)}
+                        className={`text-xs px-2 py-0.5 rounded border ${
+                          active
+                            ? 'bg-indigo-600 border-indigo-400 text-white'
+                            : 'bg-gray-700 border-gray-600 text-gray-200'
+                        }`}
+                      >
+                        {group}
+                      </button>
+                    )
+                  })}
+                </div>
               )}
             </div>
             {showBacktestHistory ? <FiChevronUp className="w-5 h-5 text-gray-400" /> : <FiChevronDown className="w-5 h-5 text-gray-400" />}
@@ -2863,7 +2983,7 @@ export default function RuleScreener({ market = 'ID' }) {
                         <span className="text-white font-medium text-sm">{entry.name}</span>
                         <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300">{entry.market || 'ID'}</span>
                         <span className="text-xs px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300">
-                          Kelompok: {entry.group || 'Tanpa Kelompok'}
+                          Kelompok: {getGroupLabel(entry)}
                         </span>
                         <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
                           entry.winCriteria === 'gapup_open_prevclose'
@@ -2894,18 +3014,29 @@ export default function RuleScreener({ market = 'ID' }) {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <select
-                        value={entry.group || ''}
+                      <div
                         onClick={(e) => e.stopPropagation()}
-                        onChange={(e) => updateHistoryEntryGroup(entry.id, e.target.value)}
-                        className="text-xs px-2 py-1 rounded bg-gray-700 border border-gray-600 text-gray-200"
-                        title="Pilih kelompok"
+                        className="flex flex-wrap justify-end gap-1 max-w-[260px]"
+                        title="Pilih satu atau lebih kelompok"
                       >
-                        <option value="">Tanpa Kelompok</option>
-                        {backtestGroups.map(group => (
-                          <option key={group} value={group}>{group}</option>
-                        ))}
-                      </select>
+                        {backtestGroups.map(group => {
+                          const active = normalizeGroups(entry).includes(group)
+                          return (
+                            <button
+                              key={group}
+                              type="button"
+                              onClick={() => updateHistoryEntryGroups(entry.id, group)}
+                              className={`text-xs px-2 py-1 rounded border ${
+                                active
+                                  ? 'bg-indigo-600 border-indigo-400 text-white'
+                                  : 'bg-gray-700 border-gray-600 text-gray-200'
+                              }`}
+                            >
+                              {group}
+                            </button>
+                          )
+                        })}
+                      </div>
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
@@ -2955,6 +3086,7 @@ export default function RuleScreener({ market = 'ID' }) {
                       {/* Config */}
                       <div className="text-xs text-gray-400">
                         Kriteria: <span className="text-gray-200">{entry.winCriteriaLabel}</span>
+                        &nbsp;•&nbsp; Kelompok: <span className="text-gray-200">{getGroupLabel(entry)}</span>
                         &nbsp;•&nbsp; Periode: <span className="text-gray-200">{entry.startDate} ~ {entry.endDate}</span>
                         &nbsp;•&nbsp; Saham: <span className="text-gray-200">{entry.symbolsCount}</span>
                         &nbsp;•&nbsp; Sampel: <span className="text-gray-200">{entry.samplesEvaluated?.toLocaleString()}</span>
@@ -3024,7 +3156,7 @@ export default function RuleScreener({ market = 'ID' }) {
                     if (confirm('Hapus semua histori backtest?')) {
                       setBacktestHistory([])
                       setSelectedHistoryExportIds(new Set())
-                      setSelectedHistoryGroupFilter('all')
+                      setSelectedHistoryGroupFilter([])
                       localStorage.removeItem('backtestHistory')
                     }
                   }}
