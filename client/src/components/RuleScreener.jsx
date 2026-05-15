@@ -789,6 +789,7 @@ export default function RuleScreener({ market = 'ID' }) {
   const [backtestHistory, setBacktestHistory] = useState([])
   const [showBacktestHistory, setShowBacktestHistory] = useState(false)
   const [expandedHistoryIds, setExpandedHistoryIds] = useState(new Set())
+  const [selectedHistoryExportIds, setSelectedHistoryExportIds] = useState(new Set())
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
   const [backtestGroups, setBacktestGroups] = useState([])
   const [newBacktestGroupName, setNewBacktestGroupName] = useState('')
@@ -1001,6 +1002,27 @@ export default function RuleScreener({ market = 'ID' }) {
     }
   }
 
+  const formatRuleValue = (value) => {
+    if (value === null || value === undefined || Number.isNaN(value)) return '-'
+    if (typeof value !== 'number') return String(value)
+    return Number.isInteger(value) ? String(value) : value.toFixed(4).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')
+  }
+
+  const getRuleLabel = (rule, index) => {
+    const leftLabel = ALL_FEATURES[rule.leftFeature]?.label || rule.leftFeature
+    const rightLabel = rule.compareType === 'constant'
+      ? formatRuleValue(parseFloat(rule.rightValue))
+      : (ALL_FEATURES[rule.rightFeature]?.label || rule.rightFeature)
+
+    return `Rule ${index + 1}: ${leftLabel} ${rule.operator} ${rightLabel}`
+  }
+
+  const formatRuleComparison = (ruleResult) => {
+    const leftText = formatRuleValue(ruleResult.leftValue)
+    const rightText = formatRuleValue(ruleResult.rightValue)
+    return `${leftText} vs ${rightText} (${ruleResult.rule.operator})`
+  }
+
   const runBacktest = async () => {
     const stocks = getSelectedStocks()
     const horizonDays = 1
@@ -1047,6 +1069,10 @@ export default function RuleScreener({ market = 'ID' }) {
         const ruleResults = rules.map((rule) => ({
           rule,
           passed: evaluateRule(rule, row),
+          leftValue: row[rule.leftFeature],
+          rightValue: rule.compareType === 'constant'
+            ? parseFloat(rule.rightValue)
+            : row[rule.rightFeature],
         }))
 
         const passed = logicOperator === 'AND'
@@ -1055,6 +1081,7 @@ export default function RuleScreener({ market = 'ID' }) {
 
         return {
           ...row,
+          ruleResults,
           signalDate: row.date,
           returnPercent: Number(row.priceChangePercent) || 0,
           currentOpen: Number(row.currentOpen) || 0,
@@ -1210,7 +1237,8 @@ export default function RuleScreener({ market = 'ID' }) {
     XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary')
 
     // Sheet 2: All Trades
-    const tradeHeaders = ['#', 'Symbol', 'Tanggal Sinyal', 'Tanggal Outcome', 'Rule Lolos', 'Outcome (%)', 'Status', 'Kriteria Win']
+    const ruleHeaders = rules.map((rule, index) => getRuleLabel(rule, index))
+    const tradeHeaders = ['#', 'Symbol', 'Tanggal Sinyal', 'Tanggal Outcome', 'Rule Lolos', 'Outcome (%)', 'Status', 'Kriteria Win', ...ruleHeaders]
     const tradeRows = backtestResult.trades.map((t, i) => [
       i + 1,
       t.symbol,
@@ -1220,6 +1248,7 @@ export default function RuleScreener({ market = 'ID' }) {
       +t.outcomePercent.toFixed(4),
       t.status,
       backtestResult.winCriteriaLabel || backtestResult.winCriteria,
+      ...(t.ruleResults || []).map((ruleResult) => formatRuleComparison(ruleResult)),
     ])
     const wsTrades = XLSX.utils.aoa_to_sheet([tradeHeaders, ...tradeRows])
     XLSX.utils.book_append_sheet(wb, wsTrades, 'All Trades')
@@ -1452,6 +1481,11 @@ export default function RuleScreener({ market = 'ID' }) {
   const deleteHistoryEntry = (entryId) => {
     const updated = backtestHistory.filter(h => h.id !== entryId)
     setBacktestHistory(updated)
+    setSelectedHistoryExportIds(prev => {
+      const next = new Set(prev)
+      next.delete(entryId)
+      return next
+    })
     localStorage.setItem('backtestHistory', JSON.stringify(updated))
   }
 
@@ -1462,6 +1496,164 @@ export default function RuleScreener({ market = 'ID' }) {
       return passFavorite && passGroup
     })
   }, [backtestHistory, showFavoritesOnly, selectedHistoryGroupFilter])
+
+  const selectedVisibleHistoryCount = useMemo(() => (
+    visibleHistoryEntries.filter(entry => selectedHistoryExportIds.has(entry.id)).length
+  ), [visibleHistoryEntries, selectedHistoryExportIds])
+
+  const toggleHistoryExportSelection = (entryId) => {
+    setSelectedHistoryExportIds(prev => {
+      const next = new Set(prev)
+      if (next.has(entryId)) {
+        next.delete(entryId)
+      } else {
+        next.add(entryId)
+      }
+      return next
+    })
+  }
+
+  const toggleSelectAllVisibleHistory = () => {
+    const visibleIds = visibleHistoryEntries.map(entry => entry.id)
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedHistoryExportIds.has(id))
+
+    setSelectedHistoryExportIds(prev => {
+      const next = new Set(prev)
+      if (allVisibleSelected) {
+        visibleIds.forEach(id => next.delete(id))
+      } else {
+        visibleIds.forEach(id => next.add(id))
+      }
+      return next
+    })
+  }
+
+  const exportSelectedHistoryExcel = () => {
+    const selectedEntries = backtestHistory.filter(entry => selectedHistoryExportIds.has(entry.id))
+    if (selectedEntries.length === 0) return
+
+    const wb = XLSX.utils.book_new()
+
+    const summaryHeaders = [
+      'Nama',
+      'Disimpan Pada',
+      'Market',
+      'Kelompok',
+      'Logic',
+      'Kriteria Win',
+      'Periode Mulai',
+      'Periode Selesai',
+      'Jumlah Saham',
+      'Samples Evaluated',
+      'Total Trades',
+      'Wins',
+      'Losses',
+      'Breakeven',
+      'Win Rate (%)',
+      'Expectancy (%)',
+      'Avg Return / Trade (%)',
+      'Avg Win (%)',
+      'Avg Loss (%)',
+      'Gross Profit (%)',
+      'Gross Loss (%)',
+      'Profit Factor',
+      'Max Drawdown (%)',
+      'Total Return (%)',
+      'Favorit',
+    ]
+
+    const summaryRows = selectedEntries.map(entry => [
+      entry.name,
+      new Date(entry.savedAt).toLocaleString('id-ID'),
+      entry.market || 'ID',
+      entry.group || 'Tanpa Kelompok',
+      entry.logicOperator || 'AND',
+      entry.winCriteriaLabel || entry.winCriteria,
+      entry.startDate,
+      entry.endDate,
+      entry.symbolsCount ?? '',
+      entry.samplesEvaluated ?? '',
+      entry.totalTrades ?? '',
+      entry.wins ?? '',
+      entry.losses ?? '',
+      entry.breakeven ?? '',
+      Number(entry.winRate?.toFixed?.(2) ?? entry.winRate ?? 0),
+      Number(entry.expectancy?.toFixed?.(4) ?? entry.expectancy ?? 0),
+      Number(entry.avgReturnPerTrade?.toFixed?.(4) ?? entry.avgReturnPerTrade ?? 0),
+      Number(entry.avgWin?.toFixed?.(4) ?? entry.avgWin ?? 0),
+      Number(entry.avgLossAbs?.toFixed?.(4) ?? entry.avgLossAbs ?? 0),
+      Number(entry.grossProfit?.toFixed?.(4) ?? entry.grossProfit ?? 0),
+      Number(entry.grossLossAbs?.toFixed?.(4) ?? entry.grossLossAbs ?? 0),
+      Number.isFinite(entry.profitFactor) ? Number(entry.profitFactor.toFixed(4)) : 'Infinity',
+      Number(entry.maxDrawdown?.toFixed?.(4) ?? entry.maxDrawdown ?? 0),
+      Number(entry.totalReturn?.toFixed?.(4) ?? entry.totalReturn ?? 0),
+      entry.favorite ? 'Ya' : 'Tidak',
+    ])
+
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.aoa_to_sheet([summaryHeaders, ...summaryRows]),
+      'History Summary'
+    )
+
+    const rulesRows = selectedEntries.flatMap(entry => (
+      (entry.rules || []).map((rule, index) => ([
+        entry.name,
+        entry.group || 'Tanpa Kelompok',
+        index + 1,
+        ALL_FEATURES[rule.leftFeature]?.label || rule.leftFeature,
+        rule.operator,
+        rule.compareType === 'constant'
+          ? 'Nilai Konstan'
+          : (ALL_FEATURES[rule.rightFeature]?.label || rule.rightFeature),
+        rule.compareType === 'constant' ? rule.rightValue : '',
+      ]))
+    ))
+
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.aoa_to_sheet([
+        ['Nama', 'Kelompok', 'Rule #', 'Left Feature', 'Operator', 'Pembanding', 'Nilai'],
+        ...rulesRows,
+      ]),
+      'Rules'
+    )
+
+    const tradeSnapshotRows = selectedEntries.flatMap(entry => ([
+      ...(entry.bestTrades || []).map((trade, index) => ([
+        entry.name,
+        'Best',
+        index + 1,
+        trade.symbol || '',
+        (trade.signalDate || trade.date || '').split('T')[0],
+        trade.outcomeDate ? String(trade.outcomeDate).split('T')[0] : '',
+        Number(trade.outcomePercent?.toFixed?.(4) ?? trade.outcomePercent ?? 0),
+        trade.status || '',
+      ])),
+      ...(entry.worstTrades || []).map((trade, index) => ([
+        entry.name,
+        'Worst',
+        index + 1,
+        trade.symbol || '',
+        (trade.signalDate || trade.date || '').split('T')[0],
+        trade.outcomeDate ? String(trade.outcomeDate).split('T')[0] : '',
+        Number(trade.outcomePercent?.toFixed?.(4) ?? trade.outcomePercent ?? 0),
+        trade.status || '',
+      ])),
+    ]))
+
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.aoa_to_sheet([
+        ['Nama', 'Kategori', 'Rank', 'Symbol', 'Tanggal Sinyal', 'Tanggal Outcome', 'Outcome (%)', 'Status'],
+        ...tradeSnapshotRows,
+      ]),
+      'Trade Snapshots'
+    )
+
+    const filename = `backtest_history_selected_${selectedEntries.length}_${new Date().toISOString().split('T')[0]}.xlsx`
+    XLSX.writeFile(wb, filename)
+  }
 
   // Run screening
   const runScreener = async () => {
@@ -2611,6 +2803,37 @@ export default function RuleScreener({ market = 'ID' }) {
                 </div>
               </div>
 
+              {visibleHistoryEntries.length > 0 && (
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-gray-900/40 rounded-lg border border-gray-700 p-3">
+                  <div className="text-xs text-gray-300">
+                    {selectedVisibleHistoryCount} dari {visibleHistoryEntries.length} histori terlihat dipilih untuk export.
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={toggleSelectAllVisibleHistory}
+                      className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-200"
+                    >
+                      {selectedVisibleHistoryCount === visibleHistoryEntries.length ? 'Batal Pilih Semua' : 'Pilih Semua Terlihat'}
+                    </button>
+                    <button
+                      onClick={() => setSelectedHistoryExportIds(new Set())}
+                      className="text-xs px-3 py-1.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-600"
+                      disabled={selectedHistoryExportIds.size === 0}
+                    >
+                      Reset Pilihan
+                    </button>
+                    <button
+                      onClick={exportSelectedHistoryExcel}
+                      className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded bg-emerald-700 hover:bg-emerald-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={selectedHistoryExportIds.size === 0}
+                    >
+                      <FiDownload className="w-3 h-3" />
+                      Download Excel Terpilih
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {visibleHistoryEntries.map(entry => (
                 <div key={entry.id} className="bg-gray-900/60 rounded-lg border border-gray-700">
                   <button
@@ -2619,6 +2842,17 @@ export default function RuleScreener({ market = 'ID' }) {
                   >
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-2 flex-wrap">
+                        <input
+                          type="checkbox"
+                          checked={selectedHistoryExportIds.has(entry.id)}
+                          onChange={(e) => {
+                            e.stopPropagation()
+                            toggleHistoryExportSelection(entry.id)
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="rounded border-gray-500 bg-gray-800 text-emerald-500 focus:ring-emerald-500"
+                          title="Pilih histori ini untuk export Excel"
+                        />
                         {entry.favorite && (
                           <FiStar className={`w-3.5 h-3.5 shrink-0 ${
                             entry.winCriteria === 'gapup_open_prevclose'
@@ -2789,6 +3023,7 @@ export default function RuleScreener({ market = 'ID' }) {
                   onClick={() => {
                     if (confirm('Hapus semua histori backtest?')) {
                       setBacktestHistory([])
+                      setSelectedHistoryExportIds(new Set())
                       setSelectedHistoryGroupFilter('all')
                       localStorage.removeItem('backtestHistory')
                     }
