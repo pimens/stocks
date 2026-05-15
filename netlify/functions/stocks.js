@@ -65,9 +65,13 @@ exports.handler = async (event, context) => {
       }
       
       const results = [];
+      const historyRange = stockService.getRequiredHistoryRange({
+        defaultRange: '1y',
+        minimumRange: '1y'
+      });
       for (const symbol of symbols) {
         try {
-          const stockData = await stockService.getStockData(symbol, '3mo', '1d', market);
+          const stockData = await stockService.getStockData(symbol, historyRange, '1d', market);
           const indicators = indicatorService.calculateAllIndicators(stockData.prices);
           const signals = indicatorService.generateSignals(indicators);
           
@@ -97,9 +101,13 @@ exports.handler = async (event, context) => {
       }
       
       const results = [];
+      const historyRange = stockService.getRequiredHistoryRange({
+        defaultRange: '1y',
+        minimumRange: '1y'
+      });
       for (const symbol of symbols) {
         try {
-          const stockData = await stockService.getStockData(symbol, '3mo', '1d', market);
+          const stockData = await stockService.getStockData(symbol, historyRange, '1d', market);
           const indicators = indicatorService.calculateAllIndicators(stockData.prices);
           const signals = indicatorService.generateSignals(indicators);
           results.push({ symbol, ...stockData, indicators, signals });
@@ -159,10 +167,16 @@ exports.handler = async (event, context) => {
         includeNeutral: Boolean(includeNeutral),
         horizonDays: parseInt(horizonDays, 10) || 1
       };
+      const historyRange = stockService.getRequiredHistoryRange({
+        startDate,
+        endDate,
+        defaultRange: '1y',
+        minimumRange: '1y'
+      });
 
       for (const symbol of symbols) {
         try {
-          const stockData = await stockService.getStockData(symbol, '1y', '1d');
+          const stockData = await stockService.getStockData(symbol, historyRange, '1d');
           
           if (!stockData.prices || stockData.prices.length < 60) {
             errors.push({ symbol, error: 'Not enough historical data' });
@@ -236,7 +250,12 @@ exports.handler = async (event, context) => {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Please provide a target date' }) };
       }
 
-      const stockData = await stockService.getStockData(symbol, '1y', '1d');
+      const historyRange = stockService.getRequiredHistoryRange({
+        targetDate,
+        defaultRange: '1y',
+        minimumRange: '1y'
+      });
+      const stockData = await stockService.getStockData(symbol, historyRange, '1d');
       
       if (!stockData.prices || stockData.prices.length < 60) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Not enough historical data for this stock' }) };
@@ -277,7 +296,12 @@ exports.handler = async (event, context) => {
       const today = new Date().toISOString().split('T')[0];
       const now = new Date();
       
-      const stockData = await stockService.getStockData(symbol, '1y', '1d', market);
+      const historyRange = stockService.getRequiredHistoryRange({
+        targetDate: today,
+        defaultRange: '1y',
+        minimumRange: '1y'
+      });
+      const stockData = await stockService.getStockData(symbol, historyRange, '1d', market);
       
       if (!stockData.prices || stockData.prices.length < 60) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Not enough historical data for this stock' }) };
@@ -392,7 +416,12 @@ exports.handler = async (event, context) => {
       const today = new Date().toISOString().split('T')[0];
       const isToday = targetDate === today;
       
-      const stockData = await stockService.getStockData(symbol, '1y', '1d', market);
+      const historyRange = stockService.getRequiredHistoryRange({
+        targetDate,
+        defaultRange: '1y',
+        minimumRange: '1y'
+      });
+      const stockData = await stockService.getStockData(symbol, historyRange, '1d', market);
       
       if (!stockData.prices || stockData.prices.length < 60) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Not enough historical data for this stock' }) };

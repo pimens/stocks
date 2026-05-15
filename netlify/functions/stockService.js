@@ -22,6 +22,17 @@ class StockService {
   constructor() {
     this.yahooFinanceBase = 'https://query1.finance.yahoo.com/v8/finance/chart';
     this.yahooQuoteBase = 'https://query1.finance.yahoo.com/v7/finance/quote';
+    this.yahooRangePriority = {
+      '5d': 0,
+      '1mo': 1,
+      '3mo': 2,
+      '6mo': 3,
+      '1y': 4,
+      '2y': 5,
+      '5y': 6,
+      '10y': 7,
+      'max': 8
+    };
   }
 
   toYahooSymbol(code, market = 'ID') {
@@ -32,6 +43,74 @@ class StockService {
       return `${code.toUpperCase()}.JK`;
     }
     return code.toUpperCase();
+  }
+
+  normalizeDate(value) {
+    if (!value) return null;
+
+    const parsed = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+
+    parsed.setUTCHours(0, 0, 0, 0);
+    return parsed;
+  }
+
+  maxHistoryRange(...ranges) {
+    return ranges.reduce((selected, candidate) => {
+      if (!candidate) return selected;
+      if (!selected) return candidate;
+
+      const selectedPriority = this.yahooRangePriority[selected] ?? -1;
+      const candidatePriority = this.yahooRangePriority[candidate] ?? -1;
+      return candidatePriority > selectedPriority ? candidate : selected;
+    }, null);
+  }
+
+  getRequiredHistoryRange(options = {}) {
+    const {
+      startDate,
+      endDate,
+      targetDate,
+      defaultRange = '1y',
+      minimumRange = defaultRange,
+      indicatorLookbackCalendarDays = 320
+    } = options;
+
+    const candidateDates = [startDate, endDate, targetDate]
+      .map(value => this.normalizeDate(value))
+      .filter(Boolean);
+
+    const baselineRange = this.maxHistoryRange(defaultRange, minimumRange) || '1y';
+
+    if (candidateDates.length === 0) {
+      return baselineRange;
+    }
+
+    const earliestDate = new Date(Math.min(...candidateDates.map(date => date.getTime())));
+    earliestDate.setUTCDate(earliestDate.getUTCDate() - indicatorLookbackCalendarDays);
+
+    const today = this.normalizeDate(new Date());
+    const millisecondsPerDay = 24 * 60 * 60 * 1000;
+    const daysBack = Math.max(0, Math.ceil((today.getTime() - earliestDate.getTime()) / millisecondsPerDay));
+
+    let inferredRange = 'max';
+    if (daysBack <= 95) {
+      inferredRange = '3mo';
+    } else if (daysBack <= 185) {
+      inferredRange = '6mo';
+    } else if (daysBack <= 370) {
+      inferredRange = '1y';
+    } else if (daysBack <= 740) {
+      inferredRange = '2y';
+    } else if (daysBack <= 1850) {
+      inferredRange = '5y';
+    } else if (daysBack <= 3700) {
+      inferredRange = '10y';
+    }
+
+    return this.maxHistoryRange(inferredRange, minimumRange) || inferredRange;
   }
 
   async getStockData(symbol, range = '3mo', interval = '1d', market = 'ID') {

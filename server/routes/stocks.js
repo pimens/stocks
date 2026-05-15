@@ -59,10 +59,14 @@ router.post('/screen', async (req, res) => {
     }
     
     const results = [];
+    const historyRange = stockService.getRequiredHistoryRange({
+      defaultRange: '1y',
+      minimumRange: '1y'
+    });
     
     for (const symbol of symbols) {
       try {
-        const stockData = await stockService.getStockData(symbol, '3mo', '1d', market);
+        const stockData = await stockService.getStockData(symbol, historyRange, '1d', market);
         const indicators = indicatorService.calculateAllIndicators(stockData.prices);
         const signals = indicatorService.generateSignals(indicators);
         
@@ -115,10 +119,14 @@ router.post('/batch', async (req, res) => {
     }
     
     const results = [];
+    const historyRange = stockService.getRequiredHistoryRange({
+      defaultRange: '1y',
+      minimumRange: '1y'
+    });
     
     for (const symbol of symbols) {
       try {
-        const stockData = await stockService.getStockData(symbol, '3mo', '1d');
+        const stockData = await stockService.getStockData(symbol, historyRange, '1d');
         const indicators = indicatorService.calculateAllIndicators(stockData.prices);
         const signals = indicatorService.generateSignals(indicators);
         
@@ -195,11 +203,16 @@ router.post('/regression-data', async (req, res) => {
       includeNeutral: Boolean(includeNeutral),
       horizonDays: parseInt(horizonDays, 10) || 1
     };
+    const historyRange = stockService.getRequiredHistoryRange({
+      startDate,
+      endDate,
+      defaultRange: '1y',
+      minimumRange: '1y'
+    });
 
     for (const symbol of symbols) {
       try {
-        // Get longer range to ensure we have enough data for indicators
-        const stockData = await stockService.getStockData(symbol, '1y', '1d');
+        const stockData = await stockService.getStockData(symbol, historyRange, '1d');
         
         if (!stockData.prices || stockData.prices.length < 60) {
           errors.push({ symbol, error: 'Not enough historical data' });
@@ -283,8 +296,12 @@ router.post('/predict-data', async (req, res) => {
       return res.status(400).json({ error: 'Please provide a target date' });
     }
 
-    // Get enough historical data for indicators
-    const stockData = await stockService.getStockData(symbol, '1y', '1d');
+    const historyRange = stockService.getRequiredHistoryRange({
+      targetDate,
+      defaultRange: '1y',
+      minimumRange: '1y'
+    });
+    const stockData = await stockService.getStockData(symbol, historyRange, '1d');
     
     if (!stockData.prices || stockData.prices.length < 60) {
       return res.status(400).json({ error: 'Not enough historical data for this stock' });
@@ -328,7 +345,12 @@ router.post('/intraday-indicators', async (req, res) => {
     const now = new Date();
     
     // Get historical daily data
-    const stockData = await stockService.getStockData(symbol, '1y', '1d', market);
+    const historyRange = stockService.getRequiredHistoryRange({
+      targetDate: today,
+      defaultRange: '1y',
+      minimumRange: '1y'
+    });
+    const stockData = await stockService.getStockData(symbol, historyRange, '1d', market);
     
     if (!stockData.prices || stockData.prices.length < 60) {
       return res.status(400).json({ error: 'Not enough historical data for this stock' });
@@ -455,8 +477,12 @@ router.post('/live-indicators', async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
     const isToday = targetDate === today;
     
-    // Get historical data
-    const stockData = await stockService.getStockData(symbol, '1y', '1d', market);
+    const historyRange = stockService.getRequiredHistoryRange({
+      targetDate,
+      defaultRange: '1y',
+      minimumRange: '1y'
+    });
+    const stockData = await stockService.getStockData(symbol, historyRange, '1d', market);
     
     if (!stockData.prices || stockData.prices.length < 60) {
       return res.status(400).json({ error: 'Not enough historical data for this stock' });
