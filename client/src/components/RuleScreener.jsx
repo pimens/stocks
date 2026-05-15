@@ -1050,6 +1050,21 @@ export default function RuleScreener({ market = 'ID' }) {
     return `Rule ${index + 1}: ${leftLabel} ${rule.operator} ${rightLabel}`
   }
 
+  const getRuleSummaryText = (entryRules = [], logic = 'AND') => {
+    if (!Array.isArray(entryRules) || entryRules.length === 0) return '-'
+
+    return entryRules
+      .map((rule) => {
+        const leftLabel = ALL_FEATURES[rule.leftFeature]?.label || rule.leftFeature
+        const rightLabel = rule.compareType === 'constant'
+          ? formatRuleValue(parseFloat(rule.rightValue))
+          : (ALL_FEATURES[rule.rightFeature]?.label || rule.rightFeature)
+
+        return `${leftLabel} ${rule.operator} ${rightLabel}`
+      })
+      .join(` ${logic || 'AND'} `)
+  }
+
   const formatRuleComparison = (ruleResult) => {
     const leftText = formatRuleValue(ruleResult.leftValue)
     const rightText = formatRuleValue(ruleResult.rightValue)
@@ -1601,6 +1616,7 @@ export default function RuleScreener({ market = 'ID' }) {
       'Disimpan Pada',
       'Market',
       'Kelompok',
+      'Semua Rules',
       'Logic',
       'Kriteria Win',
       'Periode Mulai',
@@ -1629,6 +1645,7 @@ export default function RuleScreener({ market = 'ID' }) {
       new Date(entry.savedAt).toLocaleString('id-ID'),
       entry.market || 'ID',
       getGroupLabel(entry),
+      getRuleSummaryText(entry.rules, entry.logicOperator),
       entry.logicOperator || 'AND',
       entry.winCriteriaLabel || entry.winCriteria,
       entry.startDate,
