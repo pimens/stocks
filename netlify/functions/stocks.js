@@ -1,6 +1,57 @@
 const stockService = require('./stockService');
 const indicatorService = require('../../lib/indicatorService');
 
+function evaluateRegressionRule(rule, data) {
+  const leftValue = data[rule.leftFeature];
+
+  if (leftValue === undefined || leftValue === null || Number.isNaN(Number(leftValue))) {
+    return { passed: false, leftValue, rightValue: null };
+  }
+
+  const rightValue = rule.compareType === 'constant'
+    ? parseFloat(rule.rightValue)
+    : data[rule.rightFeature];
+
+  if (rightValue === undefined || rightValue === null || Number.isNaN(Number(rightValue))) {
+    return { passed: false, leftValue, rightValue };
+  }
+
+  switch (rule.operator) {
+    case '>': return { passed: leftValue > rightValue, leftValue, rightValue };
+    case '>=': return { passed: leftValue >= rightValue, leftValue, rightValue };
+    case '<': return { passed: leftValue < rightValue, leftValue, rightValue };
+    case '<=': return { passed: leftValue <= rightValue, leftValue, rightValue };
+    case '==': return { passed: Math.abs(leftValue - rightValue) < 0.0001, leftValue, rightValue };
+    case '!=': return { passed: Math.abs(leftValue - rightValue) >= 0.0001, leftValue, rightValue };
+    default: return { passed: false, leftValue, rightValue };
+  }
+}
+
+function evaluateRegressionRules(rules, logicOperator, row) {
+  const normalizedRules = Array.isArray(rules) ? rules : [];
+  const ruleResults = normalizedRules.map((rule) => {
+    const result = evaluateRegressionRule(rule, row);
+    return {
+      rule,
+      passed: result.passed,
+      leftValue: result.leftValue,
+      rightValue: result.rightValue,
+    };
+  });
+
+  const passed = normalizedRules.length === 0
+    ? true
+    : (logicOperator === 'OR'
+      ? ruleResults.some((result) => result.passed)
+      : ruleResults.every((result) => result.passed));
+
+  return {
+    ruleResults,
+    passed,
+    passedCount: ruleResults.filter((result) => result.passed).length,
+  };
+}
+
 exports.handler = async (event, context) => {
   // Enable CORS
   const headers = {
@@ -148,7 +199,9 @@ exports.handler = async (event, context) => {
         upThreshold = 1.0,
         downThreshold = -0.5,
         includeNeutral = false,
-        horizonDays = 1
+        horizonDays = 1,
+        rules = [],
+        logicOperator = 'AND'
       } = JSON.parse(event.body || '{}');
       
       if (!symbols || !Array.isArray(symbols) || symbols.length === 0) {
@@ -161,12 +214,14 @@ exports.handler = async (event, context) => {
 
       const allData = [];
       const errors = [];
+      let samplesEvaluated = 0;
       const options = {
         upThreshold: parseFloat(upThreshold),
         downThreshold: parseFloat(downThreshold),
         includeNeutral: Boolean(includeNeutral),
         horizonDays: parseInt(horizonDays, 10) || 1
       };
+      const shouldFilterByRules = Array.isArray(rules) && rules.length > 0;
       const historyRange = stockService.getRequiredHistoryRange({
         startDate,
         endDate,
@@ -189,11 +244,31 @@ exports.handler = async (event, context) => {
             endDate,
             options
           );
+          samplesEvaluated += dataset.length;
 
-          const dataWithSymbol = dataset.map(row => ({
-            symbol: symbol.toUpperCase(),
-            ...row
-          }));
+          const dataWithSymbol = dataset
+            .map((row) => ({
+              symbol: symbol.toUpperCase(),
+              ...row
+            }))
+            .map((row) => {
+              if (!shouldFilterByRules) {
+                return row;
+              }
+
+              const evaluation = evaluateRegressionRules(rules, logicOperator, row);
+              if (!evaluation.passed) {
+                return null;
+              }
+
+              return {
+                ...row,
+                ruleResults: evaluation.ruleResults,
+                passed: true,
+                passedCount: evaluation.passedCount,
+              };
+            })
+            .filter(Boolean);
 
           allData.push(...dataWithSymbol);
         } catch (err) {
@@ -214,9 +289,11 @@ exports.handler = async (event, context) => {
 
       const summary = {
         totalRecords: allData.length,
+        samplesEvaluated,
         symbolsProcessed: [...new Set(allData.map(d => d.symbol))].length,
         dateRange: { start: startDate, end: endDate },
         thresholds: options,
+        rulesApplied: shouldFilterByRules,
         targetDistribution: {
           up: upCount,
           down: downCount,

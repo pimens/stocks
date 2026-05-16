@@ -1104,28 +1104,42 @@ export default function RuleScreener({ market = 'ID' }) {
       const response = await stockApi.getRegressionData(stocks, backtestStartDate, backtestEndDate, {
         includeNeutral: true,
         horizonDays,
+        rules: rules.map(({ id, ...rest }) => rest),
+        logicOperator,
       })
 
       const rows = response?.data || []
+      const samplesEvaluated = Number(response?.summary?.samplesEvaluated) || rows.length
 
       if (rows.length === 0) {
-        setBacktestError('Tidak ada data historis untuk range tanggal ini')
+        setBacktestError(
+          samplesEvaluated > 0
+            ? 'Tidak ada trade yang lolos rule untuk range tanggal ini'
+            : 'Tidak ada data historis untuk range tanggal ini'
+        )
         return
       }
 
       const evaluatedRows = rows.map((row) => {
-        const ruleResults = rules.map((rule) => ({
-          rule,
-          passed: evaluateRule(rule, row),
-          leftValue: row[rule.leftFeature],
-          rightValue: rule.compareType === 'constant'
-            ? parseFloat(rule.rightValue)
-            : row[rule.rightFeature],
-        }))
+        const ruleResults = Array.isArray(row.ruleResults) && row.ruleResults.length === rules.length
+          ? row.ruleResults
+          : rules.map((rule) => ({
+            rule,
+            passed: evaluateRule(rule, row),
+            leftValue: row[rule.leftFeature],
+            rightValue: rule.compareType === 'constant'
+              ? parseFloat(rule.rightValue)
+              : row[rule.rightFeature],
+          }))
 
-        const passed = logicOperator === 'AND'
-          ? ruleResults.every((r) => r.passed)
-          : ruleResults.some((r) => r.passed)
+        const passed = typeof row.passed === 'boolean'
+          ? row.passed
+          : (logicOperator === 'AND'
+            ? ruleResults.every((r) => r.passed)
+            : ruleResults.some((r) => r.passed))
+        const passedCount = Number.isFinite(row.passedCount)
+          ? row.passedCount
+          : ruleResults.filter((r) => r.passed).length
 
         return {
           ...row,
@@ -1138,7 +1152,7 @@ export default function RuleScreener({ market = 'ID' }) {
             ? (((Number(row.currentOpen) || 0) - Number(row.prevClose)) / Number(row.prevClose)) * 100
             : 0,
           passed,
-          passedCount: ruleResults.filter((r) => r.passed).length,
+          passedCount,
         }
       })
 
@@ -1225,7 +1239,7 @@ export default function RuleScreener({ market = 'ID' }) {
         winCriteriaMetricShort: winCriteriaDisplay.metricShort,
         winCriteriaMetricLong: winCriteriaDisplay.metricLong,
         symbolsCount: stocks.length,
-        samplesEvaluated: rows.length,
+        samplesEvaluated,
         totalTrades,
         wins: wins.length,
         losses: losses.length,
@@ -1245,7 +1259,11 @@ export default function RuleScreener({ market = 'ID' }) {
         trades: tradesWithOutcome,
       })
     } catch (err) {
-      setBacktestError(err.response?.data?.error || err.message || 'Gagal menjalankan backtest')
+      const rawError = err.response?.data?.error || err.message || 'Gagal menjalankan backtest'
+      const friendlyError = /Invalid string length/i.test(rawError)
+        ? 'Payload backtest terlalu besar untuk diproses. Coba kurangi jumlah saham atau pecah periode backtest menjadi beberapa bagian.'
+        : rawError
+      setBacktestError(friendlyError)
     } finally {
       setBacktestLoading(false)
     }

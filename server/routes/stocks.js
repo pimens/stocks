@@ -3,6 +3,57 @@ const router = express.Router();
 const stockService = require('../services/stockService');
 const indicatorService = require('../../lib/indicatorService');
 
+function evaluateRegressionRule(rule, data) {
+  const leftValue = data[rule.leftFeature];
+
+  if (leftValue === undefined || leftValue === null || Number.isNaN(Number(leftValue))) {
+    return { passed: false, leftValue, rightValue: null };
+  }
+
+  const rightValue = rule.compareType === 'constant'
+    ? parseFloat(rule.rightValue)
+    : data[rule.rightFeature];
+
+  if (rightValue === undefined || rightValue === null || Number.isNaN(Number(rightValue))) {
+    return { passed: false, leftValue, rightValue };
+  }
+
+  switch (rule.operator) {
+    case '>': return { passed: leftValue > rightValue, leftValue, rightValue };
+    case '>=': return { passed: leftValue >= rightValue, leftValue, rightValue };
+    case '<': return { passed: leftValue < rightValue, leftValue, rightValue };
+    case '<=': return { passed: leftValue <= rightValue, leftValue, rightValue };
+    case '==': return { passed: Math.abs(leftValue - rightValue) < 0.0001, leftValue, rightValue };
+    case '!=': return { passed: Math.abs(leftValue - rightValue) >= 0.0001, leftValue, rightValue };
+    default: return { passed: false, leftValue, rightValue };
+  }
+}
+
+function evaluateRegressionRules(rules, logicOperator, row) {
+  const normalizedRules = Array.isArray(rules) ? rules : [];
+  const ruleResults = normalizedRules.map((rule) => {
+    const result = evaluateRegressionRule(rule, row);
+    return {
+      rule,
+      passed: result.passed,
+      leftValue: result.leftValue,
+      rightValue: result.rightValue,
+    };
+  });
+
+  const passed = normalizedRules.length === 0
+    ? true
+    : (logicOperator === 'OR'
+      ? ruleResults.some((result) => result.passed)
+      : ruleResults.every((result) => result.passed));
+
+  return {
+    ruleResults,
+    passed,
+    passedCount: ruleResults.filter((result) => result.passed).length,
+  };
+}
+
 // Get list of popular Indonesian stocks
 router.get('/popular', (req, res) => {
   try {
@@ -183,7 +234,9 @@ router.post('/regression-data', async (req, res) => {
       upThreshold = 1.0,      // Default: +1% for UP
       downThreshold = -0.5,   // Default: -0.5% for DOWN
       includeNeutral = false, // Whether to include neutral data points
-      horizonDays = 1
+      horizonDays = 1,
+      rules = [],
+      logicOperator = 'AND'
     } = req.body;
     
     if (!symbols || !Array.isArray(symbols) || symbols.length === 0) {
@@ -196,6 +249,7 @@ router.post('/regression-data', async (req, res) => {
 
     const allData = [];
     const errors = [];
+    let samplesEvaluated = 0;
 
     const options = {
       upThreshold: parseFloat(upThreshold),
@@ -203,6 +257,7 @@ router.post('/regression-data', async (req, res) => {
       includeNeutral: Boolean(includeNeutral),
       horizonDays: parseInt(horizonDays, 10) || 1
     };
+    const shouldFilterByRules = Array.isArray(rules) && rules.length > 0;
     const historyRange = stockService.getRequiredHistoryRange({
       startDate,
       endDate,
@@ -225,12 +280,31 @@ router.post('/regression-data', async (req, res) => {
           endDate,
           options
         );
+        samplesEvaluated += dataset.length;
 
-        // Add symbol to each row
-        const dataWithSymbol = dataset.map(row => ({
-          symbol: symbol.toUpperCase(),
-          ...row
-        }));
+        const dataWithSymbol = dataset
+          .map((row) => ({
+            symbol: symbol.toUpperCase(),
+            ...row
+          }))
+          .map((row) => {
+            if (!shouldFilterByRules) {
+              return row;
+            }
+
+            const evaluation = evaluateRegressionRules(rules, logicOperator, row);
+            if (!evaluation.passed) {
+              return null;
+            }
+
+            return {
+              ...row,
+              ruleResults: evaluation.ruleResults,
+              passed: true,
+              passedCount: evaluation.passedCount,
+            };
+          })
+          .filter(Boolean);
 
         allData.push(...dataWithSymbol);
       } catch (err) {
@@ -253,6 +327,7 @@ router.post('/regression-data', async (req, res) => {
 
     const summary = {
       totalRecords: allData.length,
+      samplesEvaluated,
       symbolsProcessed: [...new Set(allData.map(d => d.symbol))].length,
       dateRange: {
         start: startDate,
@@ -263,6 +338,7 @@ router.post('/regression-data', async (req, res) => {
         downThreshold: options.downThreshold,
         includeNeutral: options.includeNeutral
       },
+      rulesApplied: shouldFilterByRules,
       targetDistribution: {
         up: upCount,
         down: downCount,

@@ -55,6 +55,8 @@ export const stockApi = {
       downThreshold = -0.5,
       includeNeutral = false,
       horizonDays = 1,
+      rules,
+      logicOperator,
     } = options
     const response = await axios.post(`${API_BASE}/stocks/regression-data`, {
       symbols,
@@ -63,7 +65,9 @@ export const stockApi = {
       upThreshold,
       downThreshold,
       includeNeutral,
-      horizonDays
+      horizonDays,
+      rules,
+      logicOperator
     })
     return response.data
   },
