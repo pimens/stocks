@@ -296,11 +296,13 @@ const getWinCriteriaDisplay = (criteria, horizonDays = 1) => {
   const base = BACKTEST_WIN_CRITERIA[criteria] || {}
   if (criteria !== 'return_h1_positive') return base
 
+  const horizon = normalizeHorizonDays(horizonDays)
+
   return {
     ...base,
-    label: 'Win jika Return H+1 > 0%',
-    metricShort: 'Return H+1',
-    metricLong: 'Return H+1 (close vs signal close)',
+    label: `Win jika Return H+${horizon} > 0%`,
+    metricShort: `Return H+${horizon}`,
+    metricLong: `Return H+${horizon} (close H+${horizon} vs close H)`,
   }
 }
 
@@ -1073,7 +1075,7 @@ export default function RuleScreener({ market = 'ID' }) {
 
   const runBacktest = async () => {
     const stocks = getSelectedStocks()
-    const horizonDays = 1
+    const horizonDays = normalizeHorizonDays(returnHorizonDays)
 
     if (rules.length === 0) {
       setBacktestError('Tambahkan minimal satu rule sebelum backtest')
@@ -1145,8 +1147,9 @@ export default function RuleScreener({ market = 'ID' }) {
           ...row,
           ruleResults,
           signalDate: row.date,
+          returnHorizonDays: Number(row.horizonDays) || horizonDays,
           returnPercent: Number(row.priceChangePercent) || 0,
-          currentOpen: Number(row.currentOpen) || 0,
+          currentOpen: Number(row.gapOpen ?? row.currentOpen) || 0,
           prevClose: Number(row.prevClose) || 0,
           gapOpenPercent: Number(row.prevClose)
             ? (((Number(row.currentOpen) || 0) - Number(row.prevClose)) / Number(row.prevClose)) * 100
@@ -1169,7 +1172,7 @@ export default function RuleScreener({ market = 'ID' }) {
           ? trade.gapOpenPercent
           : trade.returnPercent
         const outcomeDate = backtestWinCriteria === 'gapup_open_prevclose'
-          ? trade.signalDate
+          ? (trade.gapOpenDate || trade.signalDate)
           : (trade.futureDate || trade.signalDate)
 
         let isWin = false
@@ -1279,7 +1282,7 @@ export default function RuleScreener({ market = 'ID' }) {
       ['Backtest Summary', ''],
       ['Periode', `${backtestResult.startDate} s/d ${backtestResult.endDate}`],
       ['Win Criteria', backtestResult.winCriteriaLabel || BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.label || backtestResult.winCriteria],
-      ['Horizon', 'H+1'],
+      ['Horizon', `H+${backtestResult.returnHorizonDays || 1}`],
       ['Symbols', backtestResult.symbolsCount],
       ['Samples Evaluated', backtestResult.samplesEvaluated],
       [],
@@ -2535,14 +2538,19 @@ export default function RuleScreener({ market = 'ID' }) {
               type="number"
               min="1"
               step="1"
-              value={1}
-              disabled
-              className="w-full px-3 py-2 bg-gray-800 rounded border border-gray-700 text-gray-300 cursor-not-allowed"
+              value={returnHorizonDays}
+              onChange={(e) => setReturnHorizonDays(normalizeHorizonDays(e.target.value))}
+              disabled={backtestWinCriteria === 'gapup_open_prevclose'}
+              className={`w-full px-3 py-2 rounded border ${
+                backtestWinCriteria === 'gapup_open_prevclose'
+                  ? 'bg-gray-800 border-gray-700 text-gray-300 cursor-not-allowed'
+                  : 'bg-gray-700 border-gray-600 text-white'
+              }`}
             />
           </div>
           <div className="flex items-end">
             <p className="text-xs text-gray-400">
-              Rule selalu dievaluasi pada tanggal sinyal H, lalu konfirmasi win selalu memakai data hari berikutnya, yaitu H+1.
+              Rule selalu dievaluasi pada tanggal sinyal H. Untuk return, win dihitung dari close H ke close H+n. Untuk gap-up open, tetap memakai open H+1 vs close H.
             </p>
           </div>
         </div>
@@ -2561,7 +2569,7 @@ export default function RuleScreener({ market = 'ID' }) {
             ))}
           </select>
           <p className="text-xs text-gray-400 mt-1">
-            Pilih kriteria menang untuk mengecek hari setelah sinyal: close H+1 lebih tinggi dari close H, atau open H+1 gap-up terhadap close H.
+            Pilih kriteria menang: return bisa memakai H+n sesuai input, sedangkan gap-up open tetap memakai open H+1 terhadap close H.
           </p>
         </div>
 
@@ -2978,7 +2986,7 @@ export default function RuleScreener({ market = 'ID' }) {
                             ? 'bg-cyan-500/20 text-cyan-300'
                             : 'bg-yellow-500/20 text-yellow-300'
                         }`}>
-                          {entry.winCriteriaLabel || (entry.winCriteria === 'gapup_open_prevclose' ? 'Gap Open' : 'Return H+1')}
+                          {entry.winCriteriaLabel || (entry.winCriteria === 'gapup_open_prevclose' ? 'Gap Open' : getWinCriteriaDisplay(entry.winCriteria, entry.returnHorizonDays || 1).label)}
                         </span>
                         <span className="text-xs text-gray-500">{new Date(entry.savedAt).toLocaleString('id-ID')}</span>
                       </div>
@@ -3126,6 +3134,7 @@ export default function RuleScreener({ market = 'ID' }) {
                           setNextRuleId(rulesWithIds.length + 1)
                           setLogicOperator(entry.logicOperator || 'AND')
                           setBacktestWinCriteria(entry.winCriteria)
+                          setReturnHorizonDays(normalizeHorizonDays(entry.returnHorizonDays || 1))
                           setBacktestStartDate(entry.startDate)
                           setBacktestEndDate(entry.endDate)
                         }}
