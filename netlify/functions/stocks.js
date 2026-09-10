@@ -200,6 +200,8 @@ exports.handler = async (event, context) => {
         downThreshold = -0.5,
         includeNeutral = false,
         horizonDays = 1,
+        tpPercent = 5,
+        slPercent = 5,
         rules = [],
         logicOperator = 'AND'
       } = JSON.parse(event.body || '{}');
@@ -219,7 +221,9 @@ exports.handler = async (event, context) => {
         upThreshold: parseFloat(upThreshold),
         downThreshold: parseFloat(downThreshold),
         includeNeutral: Boolean(includeNeutral),
-        horizonDays: parseInt(horizonDays, 10) || 1
+        horizonDays: parseInt(horizonDays, 10) || 1,
+        tpPercent: parseFloat(tpPercent) || 5,
+        slPercent: parseFloat(slPercent) || 5
       };
       const shouldFilterByRules = Array.isArray(rules) && rules.length > 0;
       const historyRange = stockService.getRequiredHistoryRange({

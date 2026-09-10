@@ -158,7 +158,9 @@ module.exports = async (req, res) => {
         upThreshold = 1.0,
         downThreshold = -0.5,
         includeNeutral = false,
-        horizonDays = 1
+        horizonDays = 1,
+        tpPercent = 5,
+        slPercent = 5
       } = req.body;
 
       if (!symbols || !Array.isArray(symbols) || symbols.length === 0) {
@@ -176,7 +178,9 @@ module.exports = async (req, res) => {
         upThreshold: parseFloat(upThreshold),
         downThreshold: parseFloat(downThreshold),
         includeNeutral: Boolean(includeNeutral),
-        horizonDays: parseInt(horizonDays, 10) || 1
+        horizonDays: parseInt(horizonDays, 10) || 1,
+        tpPercent: parseFloat(tpPercent) || 5,
+        slPercent: parseFloat(slPercent) || 5
       };
 
       for (const symbol of symbols) {

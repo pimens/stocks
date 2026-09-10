@@ -55,6 +55,8 @@ export const stockApi = {
       downThreshold = -0.5,
       includeNeutral = false,
       horizonDays = 1,
+      tpPercent = 5,
+      slPercent = 5,
       rules,
       logicOperator,
     } = options
@@ -66,6 +68,8 @@ export const stockApi = {
       downThreshold,
       includeNeutral,
       horizonDays,
+      tpPercent,
+      slPercent,
       rules,
       logicOperator
     })

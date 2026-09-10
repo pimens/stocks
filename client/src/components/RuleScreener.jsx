@@ -276,9 +276,9 @@ const OPERATORS = [
 
 const BACKTEST_WIN_CRITERIA = {
   return_h1_positive: {
-    label: 'Win jika Return H+1 > 0%',
-    metricShort: 'Return H+1',
-    metricLong: 'Return H+1 (close vs signal close)',
+    label: 'Win jika TP kena sebelum SL (maks holding H+n hari)',
+    metricShort: 'TP/SL',
+    metricLong: 'Entry close H. TP kena sebelum SL dalam maks H+n hari (time exit = bukan Win)',
   },
   gapup_open_prevclose: {
     label: 'Win jika Current Open > Prev Close (Gap Up Open)',
@@ -287,12 +287,23 @@ const BACKTEST_WIN_CRITERIA = {
   },
 }
 
+const EXIT_REASON_LABELS = {
+  TP: 'TP',
+  SL: 'SL',
+  TIME_EXIT: 'H+n',
+}
+
 const normalizeHorizonDays = (value) => {
   const parsed = Number.parseInt(value, 10)
   return Number.isNaN(parsed) || parsed < 1 ? 1 : parsed
 }
 
-const getWinCriteriaDisplay = (criteria, horizonDays = 1) => {
+const normalizePercent = (value, fallback = 5) => {
+  const parsed = Number.parseFloat(value)
+  return Number.isNaN(parsed) || parsed <= 0 ? fallback : parsed
+}
+
+const getWinCriteriaDisplay = (criteria, horizonDays = 1, tpPercent = 5, slPercent = 5) => {
   const base = BACKTEST_WIN_CRITERIA[criteria] || {}
   if (criteria !== 'return_h1_positive') return base
 
@@ -300,9 +311,9 @@ const getWinCriteriaDisplay = (criteria, horizonDays = 1) => {
 
   return {
     ...base,
-    label: `Win jika Return H+${horizon} > 0%`,
-    metricShort: `Return H+${horizon}`,
-    metricLong: `Return H+${horizon} (close H+${horizon} vs close H)`,
+    label: `Win jika TP +${tpPercent}% kena sebelum SL -${slPercent}% (maks holding H+${horizon} hari)`,
+    metricShort: `TP/SL H+${horizon}`,
+    metricLong: `Entry close H. TP +${tpPercent}% kena sebelum SL -${slPercent}%, maks holding H+${horizon} hari. Time exit (tidak kena keduanya) bukan Win.`,
   }
 }
 
@@ -786,6 +797,8 @@ export default function RuleScreener({ market = 'ID' }) {
   const [backtestResult, setBacktestResult] = useState(null)
   const [showAllBacktestTrades, setShowAllBacktestTrades] = useState(false)
   const [returnHorizonDays, setReturnHorizonDays] = useState(1)
+  const [backtestTpPercent, setBacktestTpPercent] = useState(5)
+  const [backtestSlPercent, setBacktestSlPercent] = useState(5)
   const [backtestWinCriteria, setBacktestWinCriteria] = useState('return_h1_positive')
   const [screenerWinCriteria, setScreenerWinCriteria] = useState('return_h1_positive')
   const [backtestHistory, setBacktestHistory] = useState([])
@@ -1076,6 +1089,8 @@ export default function RuleScreener({ market = 'ID' }) {
   const runBacktest = async () => {
     const stocks = getSelectedStocks()
     const horizonDays = normalizeHorizonDays(returnHorizonDays)
+    const tpPercent = normalizePercent(backtestTpPercent)
+    const slPercent = normalizePercent(backtestSlPercent)
 
     if (rules.length === 0) {
       setBacktestError('Tambahkan minimal satu rule sebelum backtest')
@@ -1106,6 +1121,8 @@ export default function RuleScreener({ market = 'ID' }) {
       const response = await stockApi.getRegressionData(stocks, backtestStartDate, backtestEndDate, {
         includeNeutral: true,
         horizonDays,
+        tpPercent,
+        slPercent,
         rules: rules.map(({ id, ...rest }) => rest),
         logicOperator,
       })
@@ -1168,26 +1185,42 @@ export default function RuleScreener({ market = 'ID' }) {
         })
 
       const tradesWithOutcome = trades.map((trade) => {
-        const outcomePercent = backtestWinCriteria === 'gapup_open_prevclose'
+        const isGapupCriteria = backtestWinCriteria === 'gapup_open_prevclose'
+        // Field simulasi TP/SL dari server (jika belum ada -> fallback ke return H+n lama)
+        const hasTpsl = trade.tpslStatus !== undefined && trade.tpslStatus !== null
+
+        const outcomePercent = isGapupCriteria
           ? trade.gapOpenPercent
-          : trade.returnPercent
-        const outcomeDate = backtestWinCriteria === 'gapup_open_prevclose'
+          : hasTpsl
+            ? Number(trade.tpslPercent)
+            : trade.returnPercent
+        const outcomeDate = isGapupCriteria
           ? (trade.gapOpenDate || trade.signalDate)
-          : (trade.futureDate || trade.signalDate)
+          : hasTpsl
+            ? (trade.tpslExitDate || trade.futureDate || trade.signalDate)
+            : (trade.futureDate || trade.signalDate)
 
         let isWin = false
         let isLoss = false
         let isBreakeven = false
 
-        if (backtestWinCriteria === 'gapup_open_prevclose') {
+        if (isGapupCriteria) {
           isWin = trade.currentOpen > trade.prevClose
           isLoss = trade.currentOpen < trade.prevClose
           isBreakeven = trade.currentOpen === trade.prevClose
+        } else if (hasTpsl) {
+          // Win HANYA jika TP kena sebelum SL. SL kena = Loss.
+          // Time exit (TP/SL tidak tersentuh sampai H+n) selalu BUKAN Win.
+          isWin = trade.tpslStatus === 'TP'
+          isLoss = trade.tpslStatus === 'SL'
+          isBreakeven = !isWin && !isLoss
         } else {
           isWin = trade.returnPercent > 0
           isLoss = trade.returnPercent < 0
           isBreakeven = trade.returnPercent === 0
         }
+
+        const exitReason = !isGapupCriteria && hasTpsl ? trade.tpslStatus : null
 
         return {
           ...trade,
@@ -1196,17 +1229,25 @@ export default function RuleScreener({ market = 'ID' }) {
           outcomePercentByWinCriteria: outcomePercent,
           status: isWin ? 'Win' : isLoss ? 'Loss' : 'Breakeven',
           winCriteriaUsed: backtestWinCriteria,
-          winCriteriaLabelUsed: getWinCriteriaDisplay(backtestWinCriteria, horizonDays).label,
+          winCriteriaLabelUsed: getWinCriteriaDisplay(backtestWinCriteria, horizonDays, tpPercent, slPercent).label,
           returnHorizonDays: horizonDays,
           isWin,
           isLoss,
           isBreakeven,
+          entryPrice: hasTpsl ? trade.entryPrice : null,
+          exitPrice: hasTpsl ? trade.tpslExitPrice : null,
+          exitReason,
+          exitReasonLabel: exitReason ? (EXIT_REASON_LABELS[exitReason] || exitReason) : null,
+          daysHeld: hasTpsl ? trade.tpslDaysHeld : null,
         }
       })
 
       const wins = tradesWithOutcome.filter((t) => t.isWin)
       const losses = tradesWithOutcome.filter((t) => t.isLoss)
       const breakeven = tradesWithOutcome.filter((t) => t.isBreakeven)
+      const tpHits = tradesWithOutcome.filter((t) => t.exitReason === 'TP').length
+      const slHits = tradesWithOutcome.filter((t) => t.exitReason === 'SL').length
+      const timeExits = tradesWithOutcome.filter((t) => t.exitReason === 'TIME_EXIT').length
 
       const grossProfit = wins.reduce((sum, t) => sum + t.outcomePercent, 0)
       const grossLossAbs = Math.abs(losses.reduce((sum, t) => sum + t.outcomePercent, 0))
@@ -1231,7 +1272,7 @@ export default function RuleScreener({ market = 'ID' }) {
       })
 
       const sortedByOutcome = [...tradesWithOutcome].sort((a, b) => b.outcomePercent - a.outcomePercent)
-      const winCriteriaDisplay = getWinCriteriaDisplay(backtestWinCriteria, horizonDays)
+      const winCriteriaDisplay = getWinCriteriaDisplay(backtestWinCriteria, horizonDays, tpPercent, slPercent)
 
       setBacktestResult({
         startDate: backtestStartDate,
@@ -1241,6 +1282,11 @@ export default function RuleScreener({ market = 'ID' }) {
         winCriteriaLabel: winCriteriaDisplay.label,
         winCriteriaMetricShort: winCriteriaDisplay.metricShort,
         winCriteriaMetricLong: winCriteriaDisplay.metricLong,
+        tpPercent,
+        slPercent,
+        tpHits,
+        slHits,
+        timeExits,
         symbolsCount: stocks.length,
         samplesEvaluated,
         totalTrades,
@@ -1283,6 +1329,8 @@ export default function RuleScreener({ market = 'ID' }) {
       ['Periode', `${backtestResult.startDate} s/d ${backtestResult.endDate}`],
       ['Win Criteria', backtestResult.winCriteriaLabel || BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.label || backtestResult.winCriteria],
       ['Horizon', `H+${backtestResult.returnHorizonDays || 1}`],
+      ['Take Profit (%)', backtestResult.tpPercent ?? 5],
+      ['Stop Loss (%)', backtestResult.slPercent ?? 5],
       ['Symbols', backtestResult.symbolsCount],
       ['Samples Evaluated', backtestResult.samplesEvaluated],
       [],
@@ -1291,6 +1339,9 @@ export default function RuleScreener({ market = 'ID' }) {
       ['Wins', backtestResult.wins],
       ['Losses', backtestResult.losses],
       ['Breakeven', backtestResult.breakeven],
+      ['TP Hit', backtestResult.tpHits ?? 0],
+      ['SL Hit', backtestResult.slHits ?? 0],
+      ['Time Exit (Bukan Win)', backtestResult.timeExits ?? 0],
       ['Win Rate (%)', +backtestResult.winRate.toFixed(2)],
       ['Expectancy (%)', +backtestResult.expectancy.toFixed(4)],
       ['Avg Return / Trade (%)', +backtestResult.avgReturnPerTrade.toFixed(4)],
@@ -1307,12 +1358,16 @@ export default function RuleScreener({ market = 'ID' }) {
 
     // Sheet 2: All Trades
     const ruleHeaders = rules.map((rule, index) => getRuleLabel(rule, index))
-    const tradeHeaders = ['#', 'Symbol', 'Tanggal Sinyal', 'Tanggal Outcome', 'Rule Lolos', 'Outcome (%)', 'Status', 'Kriteria Win', ...ruleHeaders]
+    const tradeHeaders = ['#', 'Symbol', 'Tanggal Sinyal', 'Tanggal Exit', 'Exit Reason', 'Days Held', 'Harga Entry', 'Harga Exit', 'Rule Lolos', 'Outcome (%)', 'Status', 'Kriteria Win', ...ruleHeaders]
     const tradeRows = backtestResult.trades.map((t, i) => [
       i + 1,
       t.symbol,
       t.signalDate?.split('T')[0] || t.date?.split('T')[0] || '-',
       t.outcomeDate?.split('T')[0] || '-',
+      t.exitReasonLabel || '-',
+      t.daysHeld ?? '-',
+      t.entryPrice ?? '-',
+      t.exitPrice ?? '-',
       `${t.passedCount}/${rules.length}`,
       +t.outcomePercent.toFixed(4),
       t.status,
@@ -1349,6 +1404,17 @@ export default function RuleScreener({ market = 'ID' }) {
       'priceChangePercent',
       'gapOpenPercent',
       'returnPercent',
+      'entryPrice',
+      'tpPrice',
+      'slPrice',
+      'tpslStatus',
+      'tpslExitDate',
+      'tpslExitPrice',
+      'tpslPercent',
+      'tpslDaysHeld',
+      'exitReason',
+      'exitReasonLabel',
+      'daysHeld',
     ]
 
     const orderedMetaKeys = preferredMetaKeys.filter((key) => allTradeKeys.has(key))
@@ -1413,6 +1479,17 @@ export default function RuleScreener({ market = 'ID' }) {
       'priceChangePercent',
       'gapOpenPercent',
       'returnPercent',
+      'entryPrice',
+      'tpPrice',
+      'slPrice',
+      'tpslStatus',
+      'tpslExitDate',
+      'tpslExitPrice',
+      'tpslPercent',
+      'tpslDaysHeld',
+      'exitReason',
+      'exitReasonLabel',
+      'daysHeld',
     ]
 
     const orderedMetaKeys = preferredMetaKeys.filter((key) => allTradeKeys.has(key))
@@ -2531,9 +2608,9 @@ export default function RuleScreener({ market = 'ID' }) {
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Horizon Konfirmasi</label>
+            <label className="block text-sm text-gray-400 mb-1">Maksimal Holding (hari)</label>
             <input
               type="number"
               min="1"
@@ -2548,11 +2625,44 @@ export default function RuleScreener({ market = 'ID' }) {
               }`}
             />
           </div>
-          <div className="flex items-end">
-            <p className="text-xs text-gray-400">
-              Rule selalu dievaluasi pada tanggal sinyal H. Untuk return, win dihitung dari close H ke close H+n. Untuk gap-up open, tetap memakai open H+1 vs close H.
-            </p>
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Take Profit (%)</label>
+            <input
+              type="number"
+              min="0.1"
+              step="0.5"
+              value={backtestTpPercent}
+              onChange={(e) => setBacktestTpPercent(normalizePercent(e.target.value))}
+              disabled={backtestWinCriteria === 'gapup_open_prevclose'}
+              className={`w-full px-3 py-2 rounded border ${
+                backtestWinCriteria === 'gapup_open_prevclose'
+                  ? 'bg-gray-800 border-gray-700 text-gray-300 cursor-not-allowed'
+                  : 'bg-gray-700 border-gray-600 text-white'
+              }`}
+            />
           </div>
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Stop Loss (%)</label>
+            <input
+              type="number"
+              min="0.1"
+              step="0.5"
+              value={backtestSlPercent}
+              onChange={(e) => setBacktestSlPercent(normalizePercent(e.target.value))}
+              disabled={backtestWinCriteria === 'gapup_open_prevclose'}
+              className={`w-full px-3 py-2 rounded border ${
+                backtestWinCriteria === 'gapup_open_prevclose'
+                  ? 'bg-gray-800 border-gray-700 text-gray-300 cursor-not-allowed'
+                  : 'bg-gray-700 border-gray-600 text-white'
+              }`}
+            />
+          </div>
+        </div>
+
+        <div className="mt-2 flex items-start">
+          <p className="text-xs text-gray-400">
+            Entry = close hari sinyal (H). TP/SL dicek harian dari H+1 sampai H+n. Win hanya jika TP kena sebelum SL; jika tidak tersentuh sampai H+n, exit di close H+n (bukan Win). Untuk gap-up open, tetap memakai open H+1 vs close H.
+          </p>
         </div>
 
         <div className="mt-3">
@@ -2569,7 +2679,7 @@ export default function RuleScreener({ market = 'ID' }) {
             ))}
           </select>
           <p className="text-xs text-gray-400 mt-1">
-            Pilih kriteria menang: return bisa memakai H+n sesuai input, sedangkan gap-up open tetap memakai open H+1 terhadap close H.
+            Pilih kriteria menang: TP/SL memakai entry close H dengan maks holding H+n hari, sedangkan gap-up open tetap memakai open H+1 terhadap close H.
           </p>
         </div>
 
@@ -2626,6 +2736,23 @@ export default function RuleScreener({ market = 'ID' }) {
                 <div className="text-lg font-semibold text-white">{backtestResult.samplesEvaluated} sampel</div>
               </div>
             </div>
+
+            {backtestResult.winCriteria !== 'gapup_open_prevclose' && (
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-3">
+                  <div className="text-xs text-gray-400">TP Hit (Win)</div>
+                  <div className="text-lg font-semibold text-green-400">{backtestResult.tpHits ?? 0}</div>
+                </div>
+                <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-3">
+                  <div className="text-xs text-gray-400">SL Hit (Loss)</div>
+                  <div className="text-lg font-semibold text-red-400">{backtestResult.slHits ?? 0}</div>
+                </div>
+                <div className="bg-gray-900/50 border border-gray-700 rounded-lg p-3">
+                  <div className="text-xs text-gray-400">Time Exit (Bukan Win)</div>
+                  <div className="text-lg font-semibold text-gray-300">{backtestResult.timeExits ?? 0}</div>
+                </div>
+              </div>
+            )}
 
             <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3 text-sm">
               <p className="text-blue-300">
@@ -2774,6 +2901,7 @@ export default function RuleScreener({ market = 'ID' }) {
                         <th className="py-2 pr-3">Symbol</th>
                         <th className="py-2 pr-3">Tanggal Sinyal</th>
                         <th className="py-2 pr-3">Rule Lolos</th>
+                        <th className="py-2 pr-3">Exit</th>
                         <th className="py-2 pr-3">{backtestResult.winCriteriaMetricShort || BACKTEST_WIN_CRITERIA[backtestResult.winCriteria]?.metricShort || BACKTEST_WIN_CRITERIA.return_h1_positive.metricShort}</th>
                         <th className="py-2">Status</th>
                       </tr>
@@ -2785,6 +2913,11 @@ export default function RuleScreener({ market = 'ID' }) {
                           <td className="py-2 pr-3 text-white font-medium">{t.symbol}</td>
                           <td className="py-2 pr-3 text-gray-300">{(t.signalDate || t.date)?.split('T')[0] || '-'}</td>
                           <td className="py-2 pr-3 text-gray-300">{t.passedCount}/{rules.length}</td>
+                          <td className="py-2 pr-3 text-gray-300">
+                            {t.exitReasonLabel
+                              ? `${t.exitReasonLabel}${t.daysHeld != null ? ` (hari ke-${t.daysHeld})` : ''}`
+                              : '-'}
+                          </td>
                           <td className={`py-2 pr-3 font-medium ${t.outcomePercent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                             {t.outcomePercent >= 0 ? '+' : ''}{t.outcomePercent.toFixed(2)}%
                           </td>
